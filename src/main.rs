@@ -283,30 +283,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(tools_count = tools.len(), "L2 Skills registry initialized");
 
     // =========================================================================
-    // Initialize L1: Controller
+    // Initialize LLM Client for embeddings & Routing
     // =========================================================================
-    let controller = Arc::new(
-        ReActController::builder()
-            .with_store(store.clone())
-            .with_session_store(session_store.clone())
-            .with_capability(Arc::new(
-                multi_agent_controller::MemoryWritebackCapability::from_env(),
-            ))
-            .with_compressor(Arc::new(
-                multi_agent_controller::context::TruncationCompressor::new(),
-            ))
-            .build(),
-    );
-    tracing::info!("L1 Controller initialized (mock ReAct)");
-
-    // =========================================================================
-    // Initialize L0: Gateway
-    // =========================================================================
-    let approval_gate = Arc::new(multi_agent_governance::approval::ChannelApprovalGate::new(
-        multi_agent_core::types::ToolRiskLevel::High,
-    ));
-
-    // Initialize LLM Client for embeddings
     use multi_agent_core::traits::LlmClient;
 
     let llm_client: Arc<dyn LlmClient> = {
@@ -380,6 +358,47 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Initialize Model Registry & Adaptive Model Selector
+    let model_registry = Arc::new(multi_agent_model_gateway::ProviderRegistry::new());
+    model_registry.register("openai", "gpt-4o-mini", llm_client.clone());
+    model_registry.register("openai", "gpt-4o", llm_client.clone());
+    model_registry.register("anthropic", "claude-3-5-sonnet-20241022", llm_client.clone());
+
+    let model_selector = Arc::new(multi_agent_model_gateway::AdaptiveModelSelector::new(model_registry));
+    let pricing_registry = Arc::new(multi_agent_model_gateway::PricingRegistry::with_defaults());
+    let cost_tracker = Arc::new(tokio::sync::Mutex::new(multi_agent_model_gateway::SessionCostTracker::new()));
+
+    let tiered_client = Arc::new(multi_agent_model_gateway::TieredRoutingLlmClient::new(
+        model_selector,
+        pricing_registry,
+        cost_tracker,
+    ));
+
+    // =========================================================================
+    // Initialize L1: Controller
+    // =========================================================================
+    let controller = Arc::new(
+        ReActController::builder()
+            .with_store(store.clone())
+            .with_session_store(session_store.clone())
+            .with_llm(tiered_client.clone() as Arc<dyn LlmClient>)
+            .with_capability(Arc::new(
+                multi_agent_controller::MemoryWritebackCapability::from_env(),
+            ))
+            .with_compressor(Arc::new(
+                multi_agent_controller::context::TruncationCompressor::new(),
+            ))
+            .build(),
+    );
+    tracing::info!("L1 Controller initialized with dynamic Tiered LLM Routing");
+
+    // =========================================================================
+    // Initialize L0: Gateway
+    // =========================================================================
+    let approval_gate = Arc::new(multi_agent_governance::approval::ChannelApprovalGate::new(
+        multi_agent_core::types::ToolRiskLevel::High,
+    ));
+
     let routing_policy_store = Arc::new(
         match multi_agent_gateway::routing_policy::RoutingPolicyStore::new_persistent(
             ".sovereign_claw/routing/policies.json",
@@ -396,11 +415,11 @@ async fn main() -> anyhow::Result<()> {
     );
     let router = Arc::new(
         DefaultRouter::new()
-            .with_llm_classifier(llm_client.clone(), tools.clone() as Arc<dyn ToolRegistry>)
+            .with_llm_classifier(tiered_client.clone() as Arc<dyn LlmClient>, tools.clone() as Arc<dyn ToolRegistry>)
             .with_routing_policy_store(routing_policy_store.clone()),
     );
 
-    let cache = Arc::new(InMemorySemanticCache::new(llm_client.clone()));
+    let cache = Arc::new(InMemorySemanticCache::new(tiered_client.clone() as Arc<dyn LlmClient>));
 
     let gateway_config = GatewayConfig {
         host: app_config.server.host.clone(),
@@ -552,7 +571,7 @@ async fn main() -> anyhow::Result<()> {
         privacy_controller: Some(privacy_controller),
         app_config: app_config.clone(),
         network_policy: network_policy.clone(),
-        llm_client: Some(llm_client.clone()),
+        llm_client: Some(tiered_client.clone() as Arc<dyn LlmClient>),
         tool_registry: Some(tools.clone() as Arc<dyn ToolRegistry>),
     });
 
