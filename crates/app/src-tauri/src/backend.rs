@@ -421,6 +421,8 @@ thresholds:
         session_store: Some(session_store.clone()),
         app_config: app_config.clone(),
         network_policy: network_policy.clone(),
+        llm_client: None,
+        tool_registry: None,
     });
 
     // Composite Registry

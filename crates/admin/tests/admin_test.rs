@@ -34,6 +34,8 @@ async fn test_admin_provider_crud_with_encryption() {
         session_store: None,
         app_config: multi_agent_core::config::AppConfig::default(),
         network_policy: Arc::new(RwLock::new(NetworkPolicy::default())),
+        llm_client: None,
+        tool_registry: None,
     });
 
     let app = multi_agent_admin::admin_router(state);
@@ -118,3 +120,93 @@ async fn test_admin_provider_crud_with_encryption() {
     let retrieved_key_after_delete = secrets.retrieve(&api_key_id).await.unwrap();
     assert!(retrieved_key_after_delete.is_none());
 }
+
+struct TestLlm;
+#[async_trait::async_trait]
+impl multi_agent_core::traits::LlmClient for TestLlm {
+    async fn complete(&self, _prompt: &str) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+        Ok(multi_agent_core::LlmResponse {
+            content: "FINAL ANSWER: Done".to_string(),
+            finish_reason: "stop".to_string(),
+            usage: multi_agent_core::LlmUsage::default(),
+            tool_calls: None,
+        })
+    }
+    async fn chat(&self, _messages: &[multi_agent_core::traits::ChatMessage]) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+        self.complete("").await
+    }
+    async fn embed(&self, _text: &str) -> multi_agent_core::Result<Vec<f32>> {
+        Ok(vec![0.0; 10])
+    }
+}
+
+#[tokio::test]
+async fn test_admin_harness_endpoints() {
+    let audit_store = Arc::new(InMemoryAuditStore::new());
+    let rbac = Arc::new(NoOpRbacConnector);
+    let mcp_registry = Arc::new(McpRegistry::new());
+    let secrets = Arc::new(AesGcmSecretsManager::new(None));
+    let providers = Arc::new(RwLock::new(Vec::new()));
+
+    let state = Arc::new(AdminState {
+        audit_store,
+        rbac,
+        metrics: None,
+        mcp_registry,
+        providers,
+        provider_store: None,
+        secrets,
+        privacy_controller: None,
+        artifact_store: None,
+        session_store: None,
+        app_config: multi_agent_core::config::AppConfig::default(),
+        network_policy: Arc::new(RwLock::new(NetworkPolicy::default())),
+        llm_client: Some(Arc::new(TestLlm)),
+        tool_registry: Some(Arc::new(multi_agent_skills::DefaultToolRegistry::new())),
+    });
+
+    let app = multi_agent_admin::admin_router(state);
+
+    // 1. Get suites
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/harness/suites")
+                .header("Authorization", "Bearer admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let suites: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(suites.as_array().unwrap()[0]["id"], "diagnostic-suite");
+
+    // 2. Run suite
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/harness/run")
+                .header("Authorization", "Bearer admin")
+                .header("Content-Type", "application/json")
+                .body(Body::from(json!({ "suite_id": "diagnostic-suite" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let result: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(result["suite_id"], "diagnostic-suite");
+    assert_eq!(result["total_cases"], 3);
+}
+

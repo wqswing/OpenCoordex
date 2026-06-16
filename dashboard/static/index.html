@@ -93,6 +93,12 @@
                         <span>Network Governance</span>
                     </a>
                 </li>
+                <li>
+                    <a href="#" class="nav-item" data-tab="harness">
+                        <i class="fa-solid fa-vial-circle-check"></i>
+                        <span>Test Harness</span>
+                    </a>
+                </li>
             </ul>
 
             <div class="sidebar-footer">
@@ -682,7 +688,7 @@
                     </div>
                     <div class="card-body">
                         <div class="domain-manager">
-                            <div class="domain-column">
+                           <div class="domain-column">
                                 <h4 class="section-title">Allowlist (Explicit Safe)</h4>
                                 <div class="domain-input">
                                     <input type="text" id="input-allow-domain" placeholder="google.com">
@@ -698,6 +704,76 @@
                                     <button id="btn-add-deny" class="btn-icon"><i class="fa-solid fa-plus"></i></button>
                                 </div>
                                 <ul id="list-deny-domains" class="domain-list"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Test Harness Tab -->
+            <section id="harness" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Evaluation & Benchmarking Harness</h3>
+                        <div class="header-actions">
+                            <select id="harness-suite-select" class="form-control" style="width: auto; display: inline-block; margin-right: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main);"></select>
+                            <button id="btn-run-harness" class="btn-primary">
+                                <i class="fa-solid fa-play"></i> Run Suite
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="harness-suite-info" class="harness-suite-info" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; background: var(--bg-hover); border-left: 4px solid var(--primary);">
+                            <h4 id="harness-suite-name" class="suite-title" style="margin: 0 0 8px 0; color: var(--text-main); font-size: 1.1rem; font-weight: 600;">--</h4>
+                            <p id="harness-suite-desc" class="suite-description" style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">--</p>
+                        </div>
+
+                        <!-- Running overlay / loader -->
+                        <div id="harness-running-status" class="harness-running-status" style="display: none; padding: 30px; text-align: center; background: var(--bg-hover); border-radius: 8px;">
+                            <div class="loader-container">
+                                <i class="fa-solid fa-circle-notch fa-spin loader-icon" style="font-size: 2rem; color: var(--primary); margin-bottom: 12px;"></i>
+                                <div class="status-text" style="color: var(--text-main); font-weight: 500;">Benchmarking in progress, running ReAct loops...</div>
+                            </div>
+                        </div>
+
+                        <!-- Aggregated Results Panel -->
+                        <div id="harness-summary-panel" class="harness-summary-panel" style="display: none; margin-bottom: 24px;">
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-icon color-green" style="background: rgba(46, 204, 113, 0.1); color: var(--success);">
+                                        <i class="fa-solid fa-clipboard-check"></i>
+                                    </div>
+                                    <div class="stat-details">
+                                        <h3>Success Rate</h3>
+                                        <div class="stat-value" id="harness-stat-success">--</div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-icon color-orange" style="background: rgba(230, 126, 34, 0.1); color: var(--warning);">
+                                        <i class="fa-solid fa-stopwatch"></i>
+                                    </div>
+                                    <div class="stat-details">
+                                        <h3>Avg Latency</h3>
+                                        <div class="stat-value" id="harness-stat-latency">--</div>
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-icon color-purple" style="background: rgba(155, 89, 182, 0.1); color: var(--purple);">
+                                        <i class="fa-solid fa-coins"></i>
+                                    </div>
+                                    <div class="stat-details">
+                                        <h3>Total Tokens</h3>
+                                        <div class="stat-value" id="harness-stat-tokens">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Test Case Results List -->
+                        <div id="harness-results-section" style="margin-top: 24px;">
+                            <h4 class="section-title">Test Cases</h4>
+                            <div id="harness-cases-list" class="harness-cases-list" style="display: flex; flex-direction: column; gap: 12px;">
+                                <!-- Test case items go here -->
                             </div>
                         </div>
                     </div>

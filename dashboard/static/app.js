@@ -25,7 +25,8 @@ document.querySelectorAll('.nav-menu .nav-item').forEach(link => {
             audit: 'Audit Trails',
             research: 'Research Runs',
             approvals: 'Pending Approvals',
-            domains: 'Network Governance'
+            domains: 'Network Governance',
+            harness: 'Test Harness'
         };
         const pageTitle = document.getElementById('page-title');
         if (pageTitle) pageTitle.textContent = titles[tab] || tab;
@@ -33,6 +34,11 @@ document.querySelectorAll('.nav-menu .nav-item').forEach(link => {
         // Update breadcrumbs
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.textContent = `Dashboard / ${titles[tab] || tab}`;
+
+        // Lazy load harness suites if harness tab is active
+        if (tab === 'harness') {
+            loadHarnessSuites();
+        }
     });
 });
 
@@ -760,6 +766,351 @@ async function loadAuditLogs() {
 document.getElementById('btn-refresh')?.addEventListener('click', loadAuditLogs);
 
 // =========================================
+// Test Harness
+// =========================================
+let harnessSuites = [];
+
+async function loadHarnessSuites() {
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/harness/suites`);
+        if (res.ok) {
+            harnessSuites = await res.json();
+            const select = document.getElementById('harness-suite-select');
+            if (select) {
+                select.innerHTML = harnessSuites.map(suite => 
+                    `<option value="${suite.id}">${suite.name}</option>`
+                ).join('');
+                
+                // Add event listener if not already added
+                if (!select.dataset.listenerAdded) {
+                    select.addEventListener('change', (e) => {
+                        updateHarnessSuiteDetails(e.target.value);
+                    });
+                    select.dataset.listenerAdded = "true";
+                }
+                
+                // Initially show the first suite's details
+                if (harnessSuites.length > 0) {
+                    updateHarnessSuiteDetails(select.value);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Failed to load harness suites:', err);
+    }
+}
+
+function updateHarnessSuiteDetails(suiteId) {
+    const suite = harnessSuites.find(s => s.id === suiteId);
+    if (!suite) return;
+    
+    const nameEl = document.getElementById('harness-suite-name');
+    const descEl = document.getElementById('harness-suite-desc');
+    if (nameEl) nameEl.textContent = suite.name;
+    if (descEl) descEl.textContent = suite.description;
+    
+    // Hide results panel and clear cases list
+    const summaryPanel = document.getElementById('harness-summary-panel');
+    if (summaryPanel) summaryPanel.style.display = 'none';
+    
+    const casesList = document.getElementById('harness-cases-list');
+    if (casesList) {
+        casesList.innerHTML = suite.cases.map(tc => `
+            <div class="test-case-card">
+                <div class="case-card-header">
+                    <div class="case-info-left">
+                        <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border);">Ready</span>
+                        <h4 class="case-name">${tc.name}</h4>
+                    </div>
+                </div>
+                <p class="case-description">${tc.description}</p>
+                <div class="case-tags">
+                    ${tc.tags.map(tag => `<span class="case-tag">${tag}</span>`).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+document.getElementById('btn-run-harness')?.addEventListener('click', async () => {
+    const select = document.getElementById('harness-suite-select');
+    if (!select || !select.value) return;
+    
+    const suiteId = select.value;
+    const btn = document.getElementById('btn-run-harness');
+    const statusOverlay = document.getElementById('harness-running-status');
+    const summaryPanel = document.getElementById('harness-summary-panel');
+    
+    // Enable loader, disable button, hide summary panel
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running...';
+    }
+    if (statusOverlay) statusOverlay.style.display = 'block';
+    if (summaryPanel) summaryPanel.style.display = 'none';
+    
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/harness/run`, {
+            method: 'POST',
+            body: JSON.stringify({ suite_id: suiteId })
+        });
+        
+        if (res.ok) {
+            const result = await res.json();
+            renderHarnessSuiteResult(result);
+        } else {
+            alert('Failed to run harness suite. Check server configuration.');
+        }
+    } catch (err) {
+        console.error('Failed to execute harness suite:', err);
+        alert('An error occurred during execution.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-play"></i> Run Suite';
+        }
+        if (statusOverlay) statusOverlay.style.display = 'none';
+    }
+});
+
+function renderHarnessSuiteResult(result) {
+    const summaryPanel = document.getElementById('harness-summary-panel');
+    if (summaryPanel) {
+        summaryPanel.style.display = 'block';
+        
+        const successRate = result.total_cases > 0 
+            ? Math.round((result.passed_cases / result.total_cases) * 100) 
+            : 0;
+            
+        document.getElementById('harness-stat-success').textContent = `${successRate}% (${result.passed_cases}/${result.total_cases})`;
+        document.getElementById('harness-stat-latency').textContent = `${result.avg_latency_ms} ms`;
+        document.getElementById('harness-stat-tokens').textContent = result.total_tokens.toLocaleString();
+    }
+    
+    const casesList = document.getElementById('harness-cases-list');
+    if (casesList && result.results) {
+        casesList.innerHTML = result.results.map(tcResult => {
+            const originalCase = getTestCaseDetails(result.suite_id, tcResult.test_case_id);
+            const statusClass = tcResult.status.toLowerCase();
+            const badgeIcon = statusClass === 'passed' ? 'fa-circle-check' : 'fa-circle-xmark';
+            
+            // Generate tags string
+            const tagsHtml = originalCase 
+                ? originalCase.tags.map(t => `<span class="case-tag">${t}</span>`).join('') 
+                : '';
+                
+            // Format expected output text for assertion representation
+            const assertionHtml = originalCase 
+                ? renderAssertionDetails(originalCase.expected_output)
+                : '';
+                
+            // Render failure reason if failed
+            const failureHtml = tcResult.failure_reason 
+                ? `<div class="failure-reason-box">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <div><strong>Failure Reason:</strong> ${tcResult.failure_reason}</div>
+                   </div>`
+                : '';
+                
+            // Render ReAct trace history entries
+            const historyTimelineHtml = renderHistoryTimeline(tcResult.history);
+            
+            return `
+                <div class="test-case-card">
+                    <div class="case-card-header">
+                        <div class="case-info-left">
+                            <span class="status-badge ${statusClass}">
+                                <i class="fa-solid ${badgeIcon}"></i>
+                                ${tcResult.status}
+                            </span>
+                            <h4 class="case-name">${tcResult.name}</h4>
+                        </div>
+                        <div class="case-stats">
+                            <div class="case-stat-item">
+                                <i class="fa-solid fa-stopwatch"></i>
+                                <span>${tcResult.latency_ms}ms</span>
+                            </div>
+                            <div class="case-stat-item">
+                                <i class="fa-solid fa-arrow-rotate-right"></i>
+                                <span>${tcResult.steps} steps</span>
+                            </div>
+                            <div class="case-stat-item">
+                                <i class="fa-solid fa-coins"></i>
+                                <span>${tcResult.tokens_used} tokens</span>
+                            </div>
+                            <button class="toggle-trace-btn" onclick="toggleTraceDrawer(this, '${tcResult.test_case_id}')">
+                                <i class="fa-solid fa-chevron-down"></i> View Trace
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <p class="case-description">${originalCase ? originalCase.description : ''}</p>
+                    <div class="case-tags">${tagsHtml}</div>
+                    
+                    ${failureHtml}
+                    
+                    <!-- Trace Drawer -->
+                    <div class="trace-drawer" id="trace-drawer-${tcResult.test_case_id}">
+                        <div class="assertions-panel">
+                            <div class="assertion-box">
+                                <div class="assertion-box-title">Input Prompt</div>
+                                <div class="assertion-box-content" style="font-family: inherit; font-size: 14px;">${originalCase ? originalCase.prompt : ''}</div>
+                            </div>
+                            <div class="assertion-box">
+                                <div class="assertion-box-title">Expected Criteria</div>
+                                <div class="assertion-box-content">${assertionHtml}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="assertion-box" style="margin-bottom: 20px;">
+                            <div class="assertion-box-title">Actual Output</div>
+                            <div class="assertion-box-content" style="font-family: inherit; font-size: 14px; background: rgba(0,0,0,0.15); border-left: 3px solid var(--primary);">${escapeHtml(tcResult.actual_output)}</div>
+                        </div>
+                        
+                        <h5 class="section-title" style="font-size: 14px; margin-top: 20px;">ReAct Reasoning Loop Trace</h5>
+                        <div class="react-trace-timeline">
+                            ${historyTimelineHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+function getTestCaseDetails(suiteId, caseId) {
+    const suite = harnessSuites.find(s => s.id === suiteId);
+    if (!suite) return null;
+    return suite.cases.find(c => c.id === caseId) || null;
+}
+
+function renderAssertionDetails(assertion) {
+    if (!assertion || !assertion.type) return 'Unknown';
+    switch (assertion.type) {
+        case 'ExactMatch':
+            return `ExactMatch: "${escapeHtml(assertion.value)}"`;
+        case 'Contains':
+            return `Contains: "${escapeHtml(assertion.value)}"`;
+        case 'Regex':
+            return `Regex: /${escapeHtml(assertion.value)}/`;
+        case 'JsonSchema':
+            return `JSON Schema Match:\n${escapeHtml(JSON.stringify(assertion.value, null, 2))}`;
+        case 'LlmJudge':
+            return `LLM Judge Criteria: "${escapeHtml(assertion.value.criteria)}"`;
+        default:
+            return `${assertion.type}: ${escapeHtml(JSON.stringify(assertion.value))}`;
+    }
+}
+
+function renderHistoryTimeline(history) {
+    if (!history || history.length === 0) {
+        return '<div class="text-muted text-sm" style="padding: 10px 0;">No ReAct steps recorded. (Ensure persist_state is enabled in controller)</div>';
+    }
+    
+    return history.map((entry, index) => {
+        let nodeClass = '';
+        let icon = '';
+        let stepTitle = '';
+        let contentHtml = '';
+        
+        const contentStr = entry.content || '';
+        
+        if (entry.role === 'user') {
+            nodeClass = 'user';
+            icon = '<i class="fa-solid fa-user"></i>';
+            stepTitle = 'User Prompt';
+            contentHtml = `<div class="trace-step-body">${escapeHtml(contentStr)}</div>`;
+        } else if (entry.role === 'assistant') {
+            if (contentStr.includes('FINAL ANSWER:')) {
+                nodeClass = 'final-answer';
+                icon = '<i class="fa-solid fa-flag-checkered"></i>';
+                stepTitle = 'Final Answer';
+                contentHtml = `<div class="trace-step-body">${escapeHtml(contentStr)}</div>`;
+            } else {
+                nodeClass = 'thought';
+                icon = '<i class="fa-solid fa-brain"></i>';
+                stepTitle = `Reasoning Step ${index}`;
+                
+                let formatted = escapeHtml(contentStr);
+                formatted = formatted.replace(/(THOUGHT:)/g, '<strong style="color: var(--accent);">$1</strong>');
+                formatted = formatted.replace(/(ACTION:)/g, '<strong style="color: var(--primary);">$1</strong>');
+                formatted = formatted.replace(/(ARGS:)/g, '<strong style="color: var(--primary);">$1</strong>');
+                
+                contentHtml = `<div class="trace-step-body">${formatted}</div>`;
+            }
+        } else if (entry.role === 'tool') {
+            nodeClass = 'observation';
+            icon = '<i class="fa-solid fa-terminal"></i>';
+            stepTitle = 'Tool Observation';
+            contentHtml = `<div class="trace-step-body"><pre>${escapeHtml(contentStr)}</pre></div>`;
+        } else {
+            nodeClass = 'system';
+            icon = '<i class="fa-solid fa-gears"></i>';
+            stepTitle = 'System Event';
+            contentHtml = `<div class="trace-step-body">${escapeHtml(contentStr)}</div>`;
+        }
+        
+        let toolCallHtml = '';
+        if (entry.tool_call) {
+            const tc = entry.tool_call;
+            const argsStr = typeof tc.arguments === 'object' ? JSON.stringify(tc.arguments, null, 2) : tc.arguments;
+            const resultStr = tc.result ? (typeof tc.result === 'object' ? JSON.stringify(tc.result, null, 2) : tc.result) : null;
+            
+            toolCallHtml = `
+                <div class="tool-call-details" style="margin-top: 10px; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid var(--border);">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--primary); margin-bottom: 4px;">
+                        <i class="fa-solid fa-cube"></i> Tool Call: ${tc.name}
+                    </div>
+                    <pre style="margin: 0; font-size: 11px; padding: 6px;">Arguments: ${escapeHtml(argsStr)}</pre>
+                    ${resultStr ? `<pre style="margin-top: 6px; font-size: 11px; padding: 6px; border-left: 2px solid var(--success);">Result: ${escapeHtml(resultStr)}</pre>` : ''}
+                </div>
+            `;
+        }
+        
+        const timestampStr = entry.timestamp 
+            ? new Date(entry.timestamp * 1000).toLocaleTimeString() 
+            : '';
+            
+        return `
+            <div class="trace-step-node ${nodeClass}">
+                <div class="trace-step-icon">${icon}</div>
+                <div class="trace-step-content">
+                    <div class="trace-step-header">
+                        <span class="trace-step-title">${stepTitle}</span>
+                        <span class="trace-step-time">${timestampStr}</span>
+                    </div>
+                    ${contentHtml}
+                    ${toolCallHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+window.toggleTraceDrawer = (btn, caseId) => {
+    const drawer = document.getElementById(`trace-drawer-${caseId}`);
+    if (!drawer) return;
+    
+    const isActive = drawer.classList.toggle('active');
+    
+    if (isActive) {
+        btn.innerHTML = '<i class="fa-solid fa-chevron-up"></i> Hide Trace';
+    } else {
+        btn.innerHTML = '<i class="fa-solid fa-chevron-down"></i> View Trace';
+    }
+};
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// =========================================
 // Initial Load
 // =========================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -771,6 +1122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadResearchRuns();
     loadPendingApprovals();
     loadDomainGovernance();
+    loadHarnessSuites();
 
     // Auto-refresh metrics every 5s
     setInterval(loadMetrics, 5000);

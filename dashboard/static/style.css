@@ -1435,3 +1435,360 @@ input:checked+.slider:before {
 .btn-remove-domain:hover {
     color: var(--danger);
 }
+
+/* =========================================
+   Test Harness Styles
+   ========================================= */
+.harness-suite-info {
+    background: rgba(30, 41, 59, 0.4);
+    border-left: 4px solid var(--primary);
+    box-shadow: inset 0 0 10px rgba(0, 242, 255, 0.05);
+}
+
+.harness-running-status {
+    background: rgba(30, 41, 59, 0.3);
+    border: 1px dashed var(--border);
+    backdrop-filter: var(--glass-blur);
+}
+
+/* Test case card */
+.test-case-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.test-case-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: var(--shadow-soft);
+    transform: translateY(-2px);
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-badge.passed {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+}
+
+.status-badge.failed {
+    background: rgba(244, 63, 94, 0.1);
+    color: var(--danger);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    box-shadow: 0 0 10px rgba(244, 63, 94, 0.1);
+}
+
+.status-badge.timeout,
+.status-badge.error {
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--warning);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.1);
+}
+
+/* Card Header */
+.case-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.case-info-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.case-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.case-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.case-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.case-stat-item i {
+    color: var(--text-muted);
+}
+
+.case-description {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+/* Tags */
+.case-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.case-tag {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* Failure Reason Box */
+.failure-reason-box {
+    background: rgba(244, 63, 94, 0.08);
+    border-left: 4px solid var(--danger);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #fca5a5;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+/* Trace Drawer styling */
+.trace-drawer {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 16px;
+    display: none; /* Hidden by default */
+    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.trace-drawer.active {
+    display: block;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Assertions Panel */
+.assertions-panel {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+@media(min-width: 768px) {
+    .assertions-panel {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.assertion-box {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+}
+
+.assertion-box-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.assertion-box-content {
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+}
+
+/* Timeline of steps */
+.react-trace-timeline {
+    position: relative;
+    padding-left: 24px;
+    margin-top: 16px;
+}
+
+.react-trace-timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.trace-step-node {
+    position: relative;
+    margin-bottom: 24px;
+}
+
+.trace-step-node:last-child {
+    margin-bottom: 0;
+}
+
+.trace-step-icon {
+    position: absolute;
+    left: -24px;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-body);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: var(--text-muted);
+    z-index: 1;
+}
+
+/* Trace nodes styling based on role/type */
+.trace-step-node.thought .trace-step-icon {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(139, 92, 246, 0.1);
+}
+
+.trace-step-node.action .trace-step-icon {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(0, 242, 255, 0.1);
+}
+
+.trace-step-node.observation .trace-step-icon {
+    border-color: var(--warning);
+    color: var(--warning);
+    background: rgba(251, 191, 36, 0.1);
+}
+
+.trace-step-node.final-answer .trace-step-icon {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.trace-step-content {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+}
+
+.trace-step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.trace-step-title {
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.trace-step-node.thought .trace-step-title {
+    color: #c084fc; /* light violet */
+}
+
+.trace-step-node.action .trace-step-title {
+    color: var(--primary);
+}
+
+.trace-step-node.observation .trace-step-title {
+    color: #fcd34d; /* light warning */
+}
+
+.trace-step-node.final-answer .trace-step-title {
+    color: var(--success);
+}
+
+.trace-step-time {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.trace-step-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    font-family: var(--font-family);
+}
+
+.trace-step-body pre {
+    font-family: monospace;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-top: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.toggle-trace-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.toggle-trace-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}

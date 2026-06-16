@@ -12,6 +12,7 @@ members = [
     "crates/sandbox",
     "crates/app/src-tauri",
     "crates/ecosystem",
+    "crates/harness",
 ]
 
 [workspace.package]
@@ -102,6 +103,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Async traits
 async-trait = "0.1"
 
+# RegEx and JSON validation
+regex = "1.10"
+jsonschema = "0.18"
+
 # Internal crates
 # Internal crates
 multi_agent_core = { path = "crates/core" }
@@ -114,6 +119,7 @@ multi_agent_model_gateway = { path = "crates/model_gateway" }
 multi_agent_admin = { path = "crates/admin" }
 multi_agent_sandbox = { path = "crates/sandbox" }
 multi_agent_ecosystem = { path = "crates/ecosystem" }
+multi_agent_harness = { path = "crates/harness" }
 
 [package]
 name = "opencoordex"
@@ -153,3 +159,5 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio = { workspace = true, features = ["full", "test-util"] }
 redis = { version = "0.27", features = ["tokio-comp"] }
 uuid = { version = "1", features = ["v4"] }
+multi_agent_harness = { workspace = true }
+

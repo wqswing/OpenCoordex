@@ -8,6 +8,7 @@ license.workspace = true
 multi_agent_core.workspace = true
 multi_agent_governance.workspace = true
 multi_agent_skills.workspace = true
+multi_agent_harness.workspace = true
 tokio.workspace = true
 axum.workspace = true
 async-trait.workspace = true

@@ -36,6 +36,8 @@ async fn test_v0_8_features_integration() {
         network_policy: Arc::new(tokio::sync::RwLock::new(
             multi_agent_governance::network::NetworkPolicy::default(),
         )),
+        llm_client: None,
+        tool_registry: None,
     });
 
     // Initialize Gateway

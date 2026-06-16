@@ -400,7 +400,7 @@ async fn main() -> anyhow::Result<()> {
             .with_routing_policy_store(routing_policy_store.clone()),
     );
 
-    let cache = Arc::new(InMemorySemanticCache::new(llm_client));
+    let cache = Arc::new(InMemorySemanticCache::new(llm_client.clone()));
 
     let gateway_config = GatewayConfig {
         host: app_config.server.host.clone(),
@@ -552,6 +552,8 @@ async fn main() -> anyhow::Result<()> {
         privacy_controller: Some(privacy_controller),
         app_config: app_config.clone(),
         network_policy: network_policy.clone(),
+        llm_client: Some(llm_client.clone()),
+        tool_registry: Some(tools.clone() as Arc<dyn ToolRegistry>),
     });
 
     // Initialize Research Orchestrator (M10.1, M10.5)

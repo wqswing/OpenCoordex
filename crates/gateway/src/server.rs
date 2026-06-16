@@ -1864,6 +1864,8 @@ mod tests {
                 network_policy: Arc::new(tokio::sync::RwLock::new(
                     multi_agent_governance::network::NetworkPolicy::default(),
                 )),
+                llm_client: None,
+                tool_registry: None,
             })),
             plugin_manager: None,
             app_config: multi_agent_core::config::AppConfig::default(),

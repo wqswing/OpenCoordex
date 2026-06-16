@@ -1,0 +1,21 @@
+[package]
+name = "multi_agent_harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+multi_agent_core.workspace = true
+multi_agent_controller.workspace = true
+multi_agent_store.workspace = true
+multi_agent_model_gateway.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+jsonschema.workspace = true
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4.43"
