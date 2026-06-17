@@ -14,7 +14,7 @@ OpenCoordex is a production-grade, layered multi-agent platform built in Rust. I
 ### 🧠 Intelligence Layer
 - **Autonomous Agents**: Uses the ReAct (Reason+Act) pattern to solve complex, multi-step problems.
 - **Workflow Orchestration**: Supports parallel execution of tasks via DAGs and SOPs defined in YAML.
-- **Adaptive Model Selection**: Dynamically routes requests to the best LLM based on complexity and cost.
+- **Adaptive Tiered Routing**: Automatically routes tasks to different LLM tiers (Fast, Standard, Premium) based on task complexity and execution cost.
 - **Long-Term Memory**: RAG-enabled memory with Qdrant vector database integration.
 - **Model Context Protocol (MCP)**: Full support for connecting and managing external tool servers.
 
@@ -82,14 +82,15 @@ crates/
 ### Prerequisites
 - **Rust**: 1.75+
 - **Docker**: For dependencies (Redis, Qdrant, Jaeger)
-- **API Keys**: OpenAI or Anthropic
+- **API Keys**: OpenAI, Anthropic, Cohere, or any custom LLM provider (dynamically scheduled via the Tiered Model Gateway).
 
 ### Environment Setup
 
 ```bash
-# LLM Providers
+# LLM Provider API Keys (Configure based on your active routing strategy)
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-...
+export COHERE_API_KEY=...
 
 # Persistence (Optional)
 export REDIS_URL=redis://localhost:6379
