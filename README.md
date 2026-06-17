@@ -5,7 +5,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/wqswing/MultiAgent-AI/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Version](https://img.shields.io/badge/version-1.0.5-orange.svg)](https://github.com/wqswing/MultiAgent-AI/releases/tag/v1.0.5)
+[![Version](https://img.shields.io/badge/version-1.10.0-orange.svg)](https://github.com/wqswing/OpenCoordex/releases/tag/v1.10.0)
 
 OpenCoordex is a production-grade, layered multi-agent platform built in Rust. It is designed for enterprise orchestration of LLM capabilities, supporting multi-modal inputs, autonomous reasoning (ReAct), complex workflow automation (DAG/SOP), and robust governance features such as semantic caching, vector memory, and circuit breakers.
 
@@ -72,8 +72,9 @@ crates/
 ├── skills/         # Tool Registry, MCP Adapter
 ├── store/          # Redis, S3, Qdrant implementations
 ├── governance/     # Guardrails, Budget, Metrics
-├── admin/          # Management API & Dashboard
-└── model_gateway/  # LLM Provider integration
+├── model_gateway/  # LLM Provider integration
+├── harness/        # Evaluation & benchmarking harness
+└── admin/          # Management API & Dashboard
 ```
 
 ## 🛠️ Getting Started

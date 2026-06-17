@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.10.0] - 2026-06-17
+
+### 🧪 Evaluation Harness & LLM Routing
+- **Test Harness**: Introduced `multi_agent_harness` supporting test case assertions (exact match, contains, regex, json-schema, LLM judge), suites execution, and mock controller loops.
+- **Complexity-Based LLM Routing**: Implemented `TieredRoutingLlmClient` dynamically routing requests to `Fast`, `Standard`, or `Premium` models, integrated with `SessionCostTracker` for cost calculation.
+
+### 🛡️ Enterprise KYA & Access Control
+- **KYA Attestation**: Integrated KYA properties (agent ID, agent type, model name, and system prompt SHA-256 fingerprint hash) inside `ApprovalRequest`.
+- **Separation of Duties (SoD)**: Enforced role-based clearances (Admin, Security Officer, Compliance, Operator) checking against tool risk levels on `ChannelApprovalGate` before executions.
+- **OIDC/JWT Authentication Context**: Extracted auth details from REST and WebSocket endpoints to pass context to the gate.
+
+### 💾 Cryptographic Audit Trail Optimizations
+- **Connection Pooling & WAL**: Optimized `SqliteAuditStore` with thread-safe connection pooling, SQLite WAL mode, and a 5-second busy timeout.
+- **GDPR Redaction & Re-Chaining**: Re-implemented `erase_user` to redact records while recompute hash chains to maintain audit cryptographic validity.
+- **Cursor Paginated Verification**: Re-implemented integrity verification using a 1,000-row paginated cursor to avoid memory OOMs on large databases.
+
 ## [Unreleased] - 2026-02-18
 
 ### Branding
