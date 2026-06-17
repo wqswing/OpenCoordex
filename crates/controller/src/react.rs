@@ -43,6 +43,12 @@ pub struct ReActConfig {
     pub persist_state: bool,
     /// Temperature for LLM calls.
     pub temperature: f32,
+    /// KYA: Unique ID of the agent instance.
+    pub agent_id: String,
+    /// KYA: Type/role of the agent (e.g., "Coder", "Researcher", "Planner").
+    pub agent_type: String,
+    /// KYA: Underlying LLM model name.
+    pub model_name: String,
 }
 
 impl Default for ReActConfig {
@@ -52,6 +58,9 @@ impl Default for ReActConfig {
             default_budget: 50_000,
             persist_state: true,
             temperature: 0.7,
+            agent_id: "default-agent-id".to_string(),
+            agent_type: "General".to_string(),
+            model_name: "gpt-4o".to_string(),
         }
     }
 }
@@ -481,6 +490,17 @@ Always think before acting. Be concise and focused on the goal."#
                     "Tool exceeds risk threshold — requesting human approval"
                 );
 
+                use sha2::Digest;
+                let system_prompt = session
+                    .history
+                    .iter()
+                    .find(|entry| entry.role == "system")
+                    .map(|entry| entry.content.as_str())
+                    .unwrap_or("");
+                let mut hasher = sha2::Sha256::new();
+                hasher.update(system_prompt.as_bytes());
+                let prompt_hash = format!("{:x}", hasher.finalize());
+
                 let approval_req = ApprovalRequest {
                     request_id: uuid::Uuid::new_v4().to_string(),
                     session_id: session.id.clone(),
@@ -503,17 +523,25 @@ Always think before acting. Be concise and focused on the goal."#
                         .unwrap()
                         .as_secs() as i64
                         + 300, // 5 minutes default expiry
+                    agent_id: self.config.agent_id.clone(),
+                    agent_type: self.config.agent_type.clone(),
+                    system_prompt_hash: prompt_hash,
+                    model_name: self.config.model_name.clone(),
                 };
 
                 match gate.request_approval(&approval_req).await? {
                     ApprovalResponse::Approved {
                         reason,
                         reason_code,
+                        approver_id,
+                        approver_role,
                     } => {
                         tracing::info!(
                             tool = %name,
                             reason = ?reason,
                             reason_code = %reason_code,
+                            approver_id = ?approver_id,
+                            approver_role = ?approver_role,
                             "Tool call APPROVED by human"
                         );
                         // Reset deadlock counter
@@ -524,11 +552,15 @@ Always think before acting. Be concise and focused on the goal."#
                     ApprovalResponse::Denied {
                         reason,
                         reason_code,
+                        approver_id,
+                        approver_role,
                     } => {
                         tracing::warn!(
                             tool = %name,
                             reason = %reason,
                             reason_code = %reason_code,
+                            approver_id = ?approver_id,
+                            approver_role = ?approver_role,
                             "Tool call DENIED by human"
                         );
 
@@ -560,11 +592,15 @@ Always think before acting. Be concise and focused on the goal."#
                         args,
                         reason,
                         reason_code,
+                        approver_id,
+                        approver_role,
                     } => {
                         tracing::info!(
                             tool = %name,
                             reason = ?reason,
                             reason_code = %reason_code,
+                            approver_id = ?approver_id,
+                            approver_role = ?approver_role,
                             "Tool call MODIFIED by human"
                         );
                         // Reset deadlock counter

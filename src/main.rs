@@ -362,11 +362,19 @@ async fn main() -> anyhow::Result<()> {
     let model_registry = Arc::new(multi_agent_model_gateway::ProviderRegistry::new());
     model_registry.register("openai", "gpt-4o-mini", llm_client.clone());
     model_registry.register("openai", "gpt-4o", llm_client.clone());
-    model_registry.register("anthropic", "claude-3-5-sonnet-20241022", llm_client.clone());
+    model_registry.register(
+        "anthropic",
+        "claude-3-5-sonnet-20241022",
+        llm_client.clone(),
+    );
 
-    let model_selector = Arc::new(multi_agent_model_gateway::AdaptiveModelSelector::new(model_registry));
+    let model_selector = Arc::new(multi_agent_model_gateway::AdaptiveModelSelector::new(
+        model_registry,
+    ));
     let pricing_registry = Arc::new(multi_agent_model_gateway::PricingRegistry::with_defaults());
-    let cost_tracker = Arc::new(tokio::sync::Mutex::new(multi_agent_model_gateway::SessionCostTracker::new()));
+    let cost_tracker = Arc::new(tokio::sync::Mutex::new(
+        multi_agent_model_gateway::SessionCostTracker::new(),
+    ));
 
     let tiered_client = Arc::new(multi_agent_model_gateway::TieredRoutingLlmClient::new(
         model_selector,
@@ -415,11 +423,16 @@ async fn main() -> anyhow::Result<()> {
     );
     let router = Arc::new(
         DefaultRouter::new()
-            .with_llm_classifier(tiered_client.clone() as Arc<dyn LlmClient>, tools.clone() as Arc<dyn ToolRegistry>)
+            .with_llm_classifier(
+                tiered_client.clone() as Arc<dyn LlmClient>,
+                tools.clone() as Arc<dyn ToolRegistry>,
+            )
             .with_routing_policy_store(routing_policy_store.clone()),
     );
 
-    let cache = Arc::new(InMemorySemanticCache::new(tiered_client.clone() as Arc<dyn LlmClient>));
+    let cache = Arc::new(InMemorySemanticCache::new(
+        tiered_client.clone() as Arc<dyn LlmClient>
+    ));
 
     let gateway_config = GatewayConfig {
         host: app_config.server.host.clone(),

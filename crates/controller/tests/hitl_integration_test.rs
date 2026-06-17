@@ -56,6 +56,8 @@ impl ApprovalGate for DenyGate {
         Ok(ApprovalResponse::Denied {
             reason: "Denied by policy".to_string(),
             reason_code: "TEST_DENIED".to_string(),
+            approver_id: Some("system".to_string()),
+            approver_role: Some("admin".to_string()),
         })
     }
     fn threshold(&self) -> ToolRiskLevel {
@@ -75,6 +77,8 @@ impl ApprovalGate for ApproveGate {
         Ok(ApprovalResponse::Approved {
             reason: None,
             reason_code: "TEST_APPROVED".to_string(),
+            approver_id: Some("system".to_string()),
+            approver_role: Some("admin".to_string()),
         })
     }
     fn threshold(&self) -> ToolRiskLevel {
@@ -95,6 +99,8 @@ impl ApprovalGate for _ModifyGate {
             args: serde_json::json!({"command": "echo 'modified by gate'"}),
             reason: None,
             reason_code: "TEST_MODIFIED".to_string(),
+            approver_id: Some("system".to_string()),
+            approver_role: Some("admin".to_string()),
         })
     }
     fn threshold(&self) -> ToolRiskLevel {
@@ -250,6 +256,10 @@ async fn test_channel_gate_timeout_auto_deny() {
         timeout_secs: None,
         nonce: "timeout-nonce".into(),
         expires_at: chrono::Utc::now().timestamp() + 60,
+        agent_id: "test-agent".into(),
+        agent_type: "Coder".into(),
+        system_prompt_hash: "hash-1".into(),
+        model_name: "gpt-4o".into(),
     };
 
     // No response submitted → should timeout and auto-deny
@@ -290,6 +300,10 @@ async fn test_channel_gate_async_approve() {
         timeout_secs: None,
         nonce: "test-nonce-4".into(),
         expires_at: 0,
+        agent_id: "test-agent".into(),
+        agent_type: "Coder".into(),
+        system_prompt_hash: "hash-1".into(),
+        model_name: "gpt-4o".into(),
     };
 
     // Spawn the approval request
@@ -302,9 +316,13 @@ async fn test_channel_gate_async_approve() {
     gate.submit_response(
         "async-test",
         "test-nonce-4",
+        "admin_user".to_string(),
+        vec!["admin".to_string()],
         ApprovalResponse::Approved {
             reason: None,
             reason_code: "TEST_APPROVED".to_string(),
+            approver_id: None,
+            approver_role: None,
         },
     )
     .await

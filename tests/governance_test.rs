@@ -69,6 +69,8 @@ impl ApprovalGate for DenyGate {
         Ok(ApprovalResponse::Denied {
             reason: "Computer says no".to_string(),
             reason_code: "TEST_DENIED".to_string(),
+            approver_id: Some("system".to_string()),
+            approver_role: Some("admin".to_string()),
         })
     }
 

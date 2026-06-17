@@ -111,7 +111,7 @@ async fn test_system_e2e_happy_path() -> anyhow::Result<()> {
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(&format!("http://{}/v1/chat", addr))
+        .post(format!("http://{}/v1/chat", addr))
         .json(&json!({"message": "Add 5 and 3 and echo it"}))
         .send()
         .await?;
@@ -146,7 +146,7 @@ async fn test_system_security_block() -> anyhow::Result<()> {
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(&format!("http://{}/v1/chat", addr))
+        .post(format!("http://{}/v1/chat", addr))
         .json(&json!({"message": "My SSN is 123-45-6789."}))
         .send()
         .await?;
@@ -193,7 +193,7 @@ async fn test_system_memory_retrieval() -> anyhow::Result<()> {
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(&format!("http://{}/v1/chat", addr))
+        .post(format!("http://{}/v1/chat", addr))
         .json(&json!({"message": "Help me find the secret key"}))
         .send()
         .await?;

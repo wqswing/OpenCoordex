@@ -96,6 +96,19 @@ pub struct ApprovalRequest {
     pub nonce: String,
     /// Expiration timestamp (Unix epoch).
     pub expires_at: i64,
+
+    /// KYA: Unique ID of the agent instance.
+    #[serde(default)]
+    pub agent_id: String,
+    /// KYA: Type/role of the agent (e.g., "Coder", "Researcher", "Planner").
+    #[serde(default)]
+    pub agent_type: String,
+    /// KYA: SHA-256 fingerprint of the agent's system prompt/instructions.
+    #[serde(default)]
+    pub system_prompt_hash: String,
+    /// KYA: Underlying LLM serving the agent.
+    #[serde(default)]
+    pub model_name: String,
 }
 
 /// Human's response to an approval request.
@@ -108,6 +121,12 @@ pub enum ApprovalResponse {
         reason: Option<String>,
         /// Mandatory reason code for auditing (e.g., "USER_APPROVED", "AUTO_APPROVED").
         reason_code: String,
+        /// Identity of the user who approved this.
+        #[serde(default)]
+        approver_id: Option<String>,
+        /// Primary role of the approver.
+        #[serde(default)]
+        approver_role: Option<String>,
     },
     /// Denied — do not execute.
     Denied {
@@ -115,6 +134,12 @@ pub enum ApprovalResponse {
         reason: String,
         /// Mandatory reason code for auditing (e.g., "USER_DENIED", "TIMEOUT", "POLICY_VIOLATION").
         reason_code: String,
+        /// Identity of the user who denied this.
+        #[serde(default)]
+        approver_id: Option<String>,
+        /// Primary role of the approver.
+        #[serde(default)]
+        approver_role: Option<String>,
     },
     /// Modified — execute with different arguments.
     Modified {
@@ -124,5 +149,11 @@ pub enum ApprovalResponse {
         reason: Option<String>,
         /// Mandatory reason code.
         reason_code: String,
+        /// Identity of the user who modified this.
+        #[serde(default)]
+        approver_id: Option<String>,
+        /// Primary role of the approver.
+        #[serde(default)]
+        approver_role: Option<String>,
     },
 }

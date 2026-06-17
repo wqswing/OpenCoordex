@@ -1,13 +1,14 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use multi_agent_core::{
-    traits::{LlmClient, ChatMessage, LlmResponse},
+    traits::{ChatMessage, LlmClient, LlmResponse},
     types::ModelTier,
     LlmUsage,
 };
 use multi_agent_model_gateway::{
-    PricingRegistry, ProviderRegistry, AdaptiveModelSelector, SessionCostTracker, TieredRoutingLlmClient
+    AdaptiveModelSelector, PricingRegistry, ProviderRegistry, SessionCostTracker,
+    TieredRoutingLlmClient,
 };
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // Mock LLM client that returns a specific model name/id in its response
 struct MockModelClient {
@@ -41,64 +42,98 @@ impl LlmClient for MockModelClient {
 #[tokio::test]
 async fn test_tiered_routing_classification() {
     let registry = Arc::new(ProviderRegistry::new());
-    
-    let fast_client = Arc::new(MockModelClient { model_name: "openai:gpt-4o-mini".to_string() });
-    let std_client = Arc::new(MockModelClient { model_name: "openai:gpt-4o".to_string() });
-    let premium_client = Arc::new(MockModelClient { model_name: "anthropic:claude-3-5-sonnet-20241022".to_string() });
-    
+
+    let fast_client = Arc::new(MockModelClient {
+        model_name: "openai:gpt-4o-mini".to_string(),
+    });
+    let std_client = Arc::new(MockModelClient {
+        model_name: "openai:gpt-4o".to_string(),
+    });
+    let premium_client = Arc::new(MockModelClient {
+        model_name: "anthropic:claude-3-5-sonnet-20241022".to_string(),
+    });
+
     registry.register("openai", "gpt-4o-mini", fast_client);
     registry.register("openai", "gpt-4o", std_client);
     registry.register("anthropic", "claude-3-5-sonnet-20241022", premium_client);
-    
+
     let selector = Arc::new(AdaptiveModelSelector::new(registry));
     let pricing = Arc::new(PricingRegistry::with_defaults());
     let tracker = Arc::new(Mutex::new(SessionCostTracker::new()));
-    
+
     let tiered_client = TieredRoutingLlmClient::new(selector, pricing, tracker.clone());
 
     // Test prompt classification: Fast
-    assert_eq!(tiered_client.classify_prompt("THOUGHT: Let's do arithmetic."), ModelTier::Fast);
-    assert_eq!(tiered_client.classify_prompt("ACTION: calculator"), ModelTier::Fast);
-    
+    assert_eq!(
+        tiered_client.classify_prompt("THOUGHT: Let's do arithmetic."),
+        ModelTier::Fast
+    );
+    assert_eq!(
+        tiered_client.classify_prompt("ACTION: calculator"),
+        ModelTier::Fast
+    );
+
     // Test prompt classification: Premium
-    assert_eq!(tiered_client.classify_prompt("FINAL ANSWER: The result is 10."), ModelTier::Premium);
-    assert_eq!(tiered_client.classify_prompt("EVALUATION CRITERIA: ExactMatch"), ModelTier::Premium);
+    assert_eq!(
+        tiered_client.classify_prompt("FINAL ANSWER: The result is 10."),
+        ModelTier::Premium
+    );
+    assert_eq!(
+        tiered_client.classify_prompt("EVALUATION CRITERIA: ExactMatch"),
+        ModelTier::Premium
+    );
 
     // Test prompt classification: Standard (default, length > 100)
     let std_prompt = "Please describe the solar system in detail, including all the major planets, their relative sizes, and their distance from the sun, so we can write a report for school.";
-    assert_eq!(tiered_client.classify_prompt(std_prompt), ModelTier::Standard);
+    assert_eq!(
+        tiered_client.classify_prompt(std_prompt),
+        ModelTier::Standard
+    );
 }
 
 #[tokio::test]
 async fn test_tiered_routing_execution_and_pricing() -> anyhow::Result<()> {
     let registry = Arc::new(ProviderRegistry::new());
-    
-    let fast_client = Arc::new(MockModelClient { model_name: "openai:gpt-4o-mini".to_string() });
-    let std_client = Arc::new(MockModelClient { model_name: "openai:gpt-4o".to_string() });
-    let premium_client = Arc::new(MockModelClient { model_name: "anthropic:claude-3-5-sonnet-20241022".to_string() });
-    
+
+    let fast_client = Arc::new(MockModelClient {
+        model_name: "openai:gpt-4o-mini".to_string(),
+    });
+    let std_client = Arc::new(MockModelClient {
+        model_name: "openai:gpt-4o".to_string(),
+    });
+    let premium_client = Arc::new(MockModelClient {
+        model_name: "anthropic:claude-3-5-sonnet-20241022".to_string(),
+    });
+
     registry.register("openai", "gpt-4o-mini", fast_client);
     registry.register("openai", "gpt-4o", std_client);
     registry.register("anthropic", "claude-3-5-sonnet-20241022", premium_client);
-    
+
     let selector = Arc::new(AdaptiveModelSelector::new(registry));
     let pricing = Arc::new(PricingRegistry::with_defaults());
     let tracker = Arc::new(Mutex::new(SessionCostTracker::new()));
-    
+
     let tiered_client = TieredRoutingLlmClient::new(selector, pricing, tracker.clone());
 
     // 1. Fast tier call
-    let res = tiered_client.complete("THOUGHT: Call weather tool.").await?;
+    let res = tiered_client
+        .complete("THOUGHT: Call weather tool.")
+        .await?;
     assert_eq!(res.content, "Response from openai:gpt-4o-mini");
-    
+
     // 2. Standard tier call (length > 100)
     let std_prompt = "Please write a short essay explaining how a refrigerator works, focusing on the compression cycle, the expansion valve, and the heat exchange process.";
     let res = tiered_client.complete(std_prompt).await?;
     assert_eq!(res.content, "Response from openai:gpt-4o");
 
     // 3. Premium tier call
-    let res = tiered_client.complete("FINAL ANSWER: Here is the final consolidated report.").await?;
-    assert_eq!(res.content, "Response from anthropic:claude-3-5-sonnet-20241022");
+    let res = tiered_client
+        .complete("FINAL ANSWER: Here is the final consolidated report.")
+        .await?;
+    assert_eq!(
+        res.content,
+        "Response from anthropic:claude-3-5-sonnet-20241022"
+    );
 
     // 4. Verify Cost Accumulation
     // Pricing Registry defaults (per 1K):

@@ -160,4 +160,6 @@ tokio = { workspace = true, features = ["full", "test-util"] }
 redis = { version = "0.27", features = ["tokio-comp"] }
 uuid = { version = "1", features = ["v4"] }
 multi_agent_harness = { workspace = true }
+tempfile = "3"
+rusqlite.workspace = true
 

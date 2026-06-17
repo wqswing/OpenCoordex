@@ -1,9 +1,7 @@
 use multi_agent_controller::chrono_timestamp;
-use multi_agent_controller::{ReActConfig, ReActController};
+use multi_agent_controller::ReActController;
 use multi_agent_core::traits::{Controller, DistributedRateLimiter, SessionStore};
-use multi_agent_core::types::{
-    HistoryEntry, Session, SessionStatus, TaskState, TokenUsage, UserIntent,
-};
+use multi_agent_core::types::{HistoryEntry, Session, SessionStatus, TaskState, TokenUsage};
 use multi_agent_store::{RedisRateLimiter, RedisSessionStore};
 use std::sync::Arc;
 use std::time::Duration;
@@ -16,10 +14,7 @@ async fn is_redis_available(url: &str) -> bool {
         Err(_) => return false,
     };
     // Try to get a connection
-    match client.get_async_connection().await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    client.get_multiplexed_async_connection().await.is_ok()
 }
 
 #[tokio::test]
@@ -47,7 +42,7 @@ async fn test_multi_instance_session_handoff() -> anyhow::Result<()> {
     let session_store = Arc::new(RedisSessionStore::new(&redis_url, &prefix, 86400)?);
 
     // 2. Simulate Instance A
-    let controller_a = ReActController::builder()
+    let _controller_a = ReActController::builder()
         .with_session_store(session_store.clone())
         .build();
 

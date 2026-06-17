@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use multi_agent_controller::react::{ReActConfig, ReActController};
 use multi_agent_core::{
-    mocks::{MockLlm, MockSessionStore, MockToolRegistry},
+    mocks::{MockLlm, MockToolRegistry},
     traits::{Controller, IntentRouter, SessionStore, Tool},
     types::{AgentResult, NormalizedRequest, RefId, ToolOutput, UserIntent},
     Result,
@@ -158,8 +158,10 @@ async fn test_react_max_iterations() {
         "THOUGHT: Is this working?".to_string(),
     ]);
 
-    let mut config = ReActConfig::default();
-    config.max_iterations = 3;
+    let config = ReActConfig {
+        max_iterations: 3,
+        ..Default::default()
+    };
 
     let controller = ReActController::builder()
         .with_config(config)

@@ -18,9 +18,9 @@ use axum::{
     Json, Router,
 };
 use multi_agent_governance::{AuditFilter, AuditStore, RbacConnector};
+use multi_agent_governance::{PrivacyController, SecretsManager};
 use multi_agent_harness::schema::{OutputAssertion, Suite, TestCase};
 use multi_agent_harness::HarnessRunner;
-use multi_agent_governance::{PrivacyController, SecretsManager};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -31,7 +31,9 @@ use tokio::sync::RwLock;
 #[folder = "../../dashboard/static"]
 struct Asset;
 
-use multi_agent_core::traits::{ArtifactStore, LlmClient, ProviderStore, SessionStore, ToolRegistry};
+use multi_agent_core::traits::{
+    ArtifactStore, LlmClient, ProviderStore, SessionStore, ToolRegistry,
+};
 use multi_agent_core::types::RefId;
 use multi_agent_skills::mcp_registry::{McpRegistry, McpServerInfo};
 use sha2::{Digest, Sha256};
@@ -1173,9 +1175,7 @@ fn get_default_suites() -> Vec<Suite> {
     ]
 }
 
-async fn list_harness_suites(
-    State(_state): State<Arc<AdminState>>,
-) -> Response {
+async fn list_harness_suites(State(_state): State<Arc<AdminState>>) -> Response {
     let suites = get_default_suites();
     Json(suites).into_response()
 }
@@ -1214,7 +1214,7 @@ async fn run_harness_suite(
 
     // Instantiate HarnessRunner
     let runner = HarnessRunner::new(llm.clone(), tools.clone(), Some(llm.clone()));
-    
+
     // Execute suite
     let result = runner.run_suite(&suite).await;
 

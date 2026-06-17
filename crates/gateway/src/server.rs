@@ -298,7 +298,13 @@ impl GatewayServer {
             .route("/v1/chat", post(chat_handler))
             .route("/v1/intent", post(intent_handler))
             .route("/v1/webhook/:event_type", post(webhook_handler))
-            .route("/v1/approve/:request_id", post(approve_rest_handler))
+            .route(
+                "/v1/approve/:request_id",
+                post(approve_rest_handler).route_layer(axum::middleware::from_fn_with_state(
+                    self.state.clone(),
+                    bearer_auth_middleware,
+                )),
+            )
             .with_state(self.state.clone());
 
         // Admin API
@@ -1555,12 +1561,25 @@ pub struct ApproveResponse {
 /// as JSON. They respond with approval/denial decisions.
 async fn approval_ws_handler(
     State(state): State<Arc<AppState>>,
+    user: Option<axum::Extension<multi_agent_governance::rbac::UserContext>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_approval_ws(state, socket))
+    let user_ctx = user.map(|axum::Extension(u)| u).unwrap_or_else(|| {
+        multi_agent_governance::rbac::UserContext {
+            user_id: "anonymous_approver".to_string(),
+            roles: vec!["admin".to_string()],
+            permissions: vec!["*".to_string()],
+            session_id: None,
+        }
+    });
+    ws.on_upgrade(move |socket| handle_approval_ws(state, user_ctx, socket))
 }
 
-async fn handle_approval_ws(state: Arc<AppState>, mut socket: WebSocket) {
+async fn handle_approval_ws(
+    state: Arc<AppState>,
+    user: multi_agent_governance::rbac::UserContext,
+    mut socket: WebSocket,
+) {
     let gate = match &state.approval_gate {
         Some(gate) => gate.clone(),
         None => {
@@ -1608,20 +1627,28 @@ async fn handle_approval_ws(state: Arc<AppState>, mut socket: WebSocket) {
                                     "approved" => ApprovalResponse::Approved {
                                         reason: resp.reason.clone(),
                                         reason_code: resp.reason_code.clone().unwrap_or_else(|| "USER_APPROVED".to_string()),
+                                        approver_id: None,
+                                        approver_role: None,
                                     },
                                     "denied" => ApprovalResponse::Denied {
                                         reason: resp.reason.clone().unwrap_or_else(|| "Denied via WebSocket".into()),
                                         reason_code: resp.reason_code.clone().unwrap_or_else(|| "USER_DENIED".to_string()),
+                                        approver_id: None,
+                                        approver_role: None,
                                     },
                                     "modified" => match resp.modified_args {
                                         Some(args) => ApprovalResponse::Modified {
                                             args,
                                             reason: resp.reason.clone(),
                                             reason_code: resp.reason_code.clone().unwrap_or_else(|| "USER_MODIFIED".to_string()),
+                                            approver_id: None,
+                                            approver_role: None,
                                         },
                                         None => ApprovalResponse::Denied {
                                             reason: "Modified without args".into(),
                                             reason_code: "INVALID_RESPONSE".to_string(),
+                                            approver_id: None,
+                                            approver_role: None,
                                         },
                                     },
                                     _ => {
@@ -1630,7 +1657,13 @@ async fn handle_approval_ws(state: Arc<AppState>, mut socket: WebSocket) {
                                     }
                                 };
 
-                                if let Err(e) = gate.submit_response(&resp.request_id, &resp.nonce, approval_response).await {
+                                if let Err(e) = gate.submit_response(
+                                    &resp.request_id,
+                                    &resp.nonce,
+                                    user.user_id.clone(),
+                                    user.roles.clone(),
+                                    approval_response
+                                ).await {
                                     tracing::warn!("Failed to submit approval response: {}", e);
                                 }
                             }
@@ -1697,6 +1730,7 @@ async fn handle_logs_ws(state: Arc<AppState>, mut socket: WebSocket) {
 /// `POST /v1/approve/:request_id`
 async fn approve_rest_handler(
     State(state): State<Arc<AppState>>,
+    user: Option<axum::Extension<multi_agent_governance::rbac::UserContext>>,
     headers: HeaderMap,
     Path(request_id): Path<String>,
     Json(payload): Json<ApproveRequest>,
@@ -1756,6 +1790,15 @@ async fn approve_rest_handler(
         (status, Json(wrapped)).into_response()
     };
 
+    let user_ctx = user.map(|axum::Extension(u)| u).unwrap_or_else(|| {
+        multi_agent_governance::rbac::UserContext {
+            user_id: "anonymous_approver".to_string(),
+            roles: vec!["admin".to_string()],
+            permissions: vec!["*".to_string()],
+            session_id: None,
+        }
+    });
+
     let gate = match &state.approval_gate {
         Some(gate) => gate.clone(),
         None => {
@@ -1776,6 +1819,8 @@ async fn approve_rest_handler(
                 .reason_code
                 .clone()
                 .unwrap_or_else(|| "USER_APPROVED".to_string()),
+            approver_id: None,
+            approver_role: None,
         },
         "denied" => ApprovalResponse::Denied {
             reason: payload
@@ -1786,6 +1831,8 @@ async fn approve_rest_handler(
                 .reason_code
                 .clone()
                 .unwrap_or_else(|| "USER_DENIED".to_string()),
+            approver_id: None,
+            approver_role: None,
         },
         _ => {
             return finalize(
@@ -1802,7 +1849,13 @@ async fn approve_rest_handler(
     };
 
     match gate
-        .submit_response(&request_id, &payload.nonce, response)
+        .submit_response(
+            &request_id,
+            &payload.nonce,
+            user_ctx.user_id.clone(),
+            user_ctx.roles.clone(),
+            response,
+        )
         .await
     {
         Ok(()) => finalize(

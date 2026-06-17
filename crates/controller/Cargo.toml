@@ -10,6 +10,7 @@ multi_agent_store.workspace = true
 multi_agent_skills.workspace = true
 multi_agent_model_gateway.workspace = true
 multi_agent_governance.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 tracing.workspace = true

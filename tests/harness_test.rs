@@ -1,6 +1,6 @@
 use multi_agent_core::traits::{ChatMessage, LlmClient};
 use multi_agent_core::{LlmResponse, LlmUsage};
-use multi_agent_harness::schema::{OutputAssertion, TestCase, RunStatus};
+use multi_agent_harness::schema::{OutputAssertion, RunStatus, TestCase};
 use multi_agent_harness::HarnessRunner;
 use multi_agent_skills::DefaultToolRegistry;
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ impl LlmClient for DummyLlm {
 async fn test_harness_exact_match_success() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    
+
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, None);
 
     let test_case = TestCase {
@@ -43,9 +43,7 @@ async fn test_harness_exact_match_success() -> anyhow::Result<()> {
         prompt: "Say Hello".to_string(),
         expected_output: OutputAssertion::ExactMatch("Hello World".to_string()),
         tags: vec!["test".to_string()],
-        mock_llm_responses: Some(vec![
-            "FINAL ANSWER: Hello World".to_string(),
-        ]),
+        mock_llm_responses: Some(vec!["FINAL ANSWER: Hello World".to_string()]),
         mock_tool_outputs: None,
         max_iterations: None,
         token_budget: None,
@@ -63,7 +61,7 @@ async fn test_harness_exact_match_success() -> anyhow::Result<()> {
 async fn test_harness_contains_failure() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    
+
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, None);
 
     let test_case = TestCase {
@@ -73,9 +71,7 @@ async fn test_harness_contains_failure() -> anyhow::Result<()> {
         prompt: "Say Hello".to_string(),
         expected_output: OutputAssertion::Contains("FailureTarget".to_string()),
         tags: vec!["test".to_string()],
-        mock_llm_responses: Some(vec![
-            "FINAL ANSWER: Hello World".to_string(),
-        ]),
+        mock_llm_responses: Some(vec!["FINAL ANSWER: Hello World".to_string()]),
         mock_tool_outputs: None,
         max_iterations: None,
         token_budget: None,
@@ -83,7 +79,10 @@ async fn test_harness_contains_failure() -> anyhow::Result<()> {
 
     let result = runner.run_test_case(&test_case).await;
     assert_eq!(result.status, RunStatus::Failed);
-    assert!(result.failure_reason.unwrap().contains("did not contain substring"));
+    assert!(result
+        .failure_reason
+        .unwrap()
+        .contains("did not contain substring"));
 
     Ok(())
 }
@@ -92,7 +91,7 @@ async fn test_harness_contains_failure() -> anyhow::Result<()> {
 async fn test_harness_regex_match() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    
+
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, None);
 
     let test_case = TestCase {
@@ -100,11 +99,11 @@ async fn test_harness_regex_match() -> anyhow::Result<()> {
         name: "Regex Match Test".to_string(),
         description: "Verify regex assertion works".to_string(),
         prompt: "Output a valid email".to_string(),
-        expected_output: OutputAssertion::Regex(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$".to_string()),
+        expected_output: OutputAssertion::Regex(
+            r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$".to_string(),
+        ),
         tags: vec!["test".to_string()],
-        mock_llm_responses: Some(vec![
-            "FINAL ANSWER: test@example.com".to_string(),
-        ]),
+        mock_llm_responses: Some(vec!["FINAL ANSWER: test@example.com".to_string()]),
         mock_tool_outputs: None,
         max_iterations: None,
         token_budget: None,
@@ -121,7 +120,7 @@ async fn test_harness_regex_match() -> anyhow::Result<()> {
 async fn test_harness_json_schema_validation() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    
+
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, None);
 
     let schema = serde_json::json!({
@@ -158,7 +157,7 @@ async fn test_harness_json_schema_validation() -> anyhow::Result<()> {
 async fn test_harness_mock_tool_outputs() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    
+
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, None);
 
     let mut mock_tools = HashMap::new();
@@ -172,7 +171,8 @@ async fn test_harness_mock_tool_outputs() -> anyhow::Result<()> {
         expected_output: OutputAssertion::Contains("sum is 8".to_string()),
         tags: vec!["test".to_string()],
         mock_llm_responses: Some(vec![
-            "THOUGHT: Let me call calculator tool.\nACTION: calculator\nARGS: {\"a\": 5, \"b\": 3}".to_string(),
+            "THOUGHT: Let me call calculator tool.\nACTION: calculator\nARGS: {\"a\": 5, \"b\": 3}"
+                .to_string(),
             "FINAL ANSWER: The sum is 8".to_string(),
         ]),
         mock_tool_outputs: Some(mock_tools),

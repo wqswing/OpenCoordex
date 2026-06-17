@@ -124,7 +124,10 @@ async fn test_admin_provider_crud_with_encryption() {
 struct TestLlm;
 #[async_trait::async_trait]
 impl multi_agent_core::traits::LlmClient for TestLlm {
-    async fn complete(&self, _prompt: &str) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+    async fn complete(
+        &self,
+        _prompt: &str,
+    ) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
         Ok(multi_agent_core::LlmResponse {
             content: "FINAL ANSWER: Done".to_string(),
             finish_reason: "stop".to_string(),
@@ -132,7 +135,10 @@ impl multi_agent_core::traits::LlmClient for TestLlm {
             tool_calls: None,
         })
     }
-    async fn chat(&self, _messages: &[multi_agent_core::traits::ChatMessage]) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+    async fn chat(
+        &self,
+        _messages: &[multi_agent_core::traits::ChatMessage],
+    ) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
         self.complete("").await
     }
     async fn embed(&self, _text: &str) -> multi_agent_core::Result<Vec<f32>> {
@@ -196,7 +202,9 @@ async fn test_admin_harness_endpoints() {
                 .uri("/api/harness/run")
                 .header("Authorization", "Bearer admin")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({ "suite_id": "diagnostic-suite" }).to_string()))
+                .body(Body::from(
+                    json!({ "suite_id": "diagnostic-suite" }).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -209,4 +217,3 @@ async fn test_admin_harness_endpoints() {
     assert_eq!(result["suite_id"], "diagnostic-suite");
     assert_eq!(result["total_cases"], 3);
 }
-

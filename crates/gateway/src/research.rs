@@ -152,6 +152,10 @@ impl ResearchOrchestrator {
                 timeout_secs: Some(600),
                 nonce: Uuid::new_v4().to_string(),
                 expires_at: (Utc::now() + chrono::Duration::seconds(600)).timestamp(),
+                agent_id: "research-agent-id".to_string(),
+                agent_type: "Researcher".to_string(),
+                system_prompt_hash: String::new(),
+                model_name: "gpt-4o".to_string(),
             };
 
             let response = self.approval_gate.request_approval(&approval_req).await?;

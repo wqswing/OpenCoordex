@@ -1,12 +1,12 @@
+use crate::pricing::{PricingRegistry, SessionCostTracker};
 use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use multi_agent_core::{
-    traits::{LlmClient, ModelSelector, ChatMessage, LlmResponse},
+    traits::{ChatMessage, LlmClient, LlmResponse, ModelSelector},
     types::ModelTier,
     Result,
 };
-use crate::pricing::{PricingRegistry, SessionCostTracker};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Proxy LLM client that dynamically routes prompts to different model tiers
 /// (Fast, Standard, Premium) based on complexity and records pricing metrics.
@@ -32,7 +32,7 @@ impl TieredRoutingLlmClient {
     /// Classify the complexity tier based on prompt content
     pub fn classify_prompt(&self, prompt: &str) -> ModelTier {
         let trimmed = prompt.trim();
-        
+
         // 1. Premium criteria: heavy reasoning, planning or evaluation
         if trimmed.contains("FINAL ANSWER:")
             || trimmed.contains("EVALUATION CRITERIA")
@@ -77,10 +77,10 @@ impl LlmClient for TieredRoutingLlmClient {
     async fn complete(&self, prompt: &str) -> Result<LlmResponse> {
         let tier = self.classify_prompt(prompt);
         tracing::debug!(tier = ?tier, "Tiered routing decision for completion");
-        
+
         let client = self.selector.select(tier).await?;
         let res = client.complete(prompt).await?;
-        
+
         let model_id = match tier {
             ModelTier::Fast => "openai:gpt-4o-mini",
             ModelTier::Standard => "openai:gpt-4o",
@@ -89,7 +89,11 @@ impl LlmClient for TieredRoutingLlmClient {
 
         if let Some(pricing) = self.pricing.get(model_id) {
             let mut tracker = self.tracker.lock().await;
-            tracker.record(pricing, res.usage.prompt_tokens, res.usage.completion_tokens);
+            tracker.record(
+                pricing,
+                res.usage.prompt_tokens,
+                res.usage.completion_tokens,
+            );
             tracing::debug!(
                 accumulated_cost = tracker.accumulated_cost,
                 "Recorded LLM cost for {}",
@@ -103,10 +107,10 @@ impl LlmClient for TieredRoutingLlmClient {
     async fn chat(&self, messages: &[ChatMessage]) -> Result<LlmResponse> {
         let tier = self.classify_messages(messages);
         tracing::debug!(tier = ?tier, "Tiered routing decision for chat");
-        
+
         let client = self.selector.select(tier).await?;
         let res = client.chat(messages).await?;
-        
+
         let model_id = match tier {
             ModelTier::Fast => "openai:gpt-4o-mini",
             ModelTier::Standard => "openai:gpt-4o",
@@ -115,7 +119,11 @@ impl LlmClient for TieredRoutingLlmClient {
 
         if let Some(pricing) = self.pricing.get(model_id) {
             let mut tracker = self.tracker.lock().await;
-            tracker.record(pricing, res.usage.prompt_tokens, res.usage.completion_tokens);
+            tracker.record(
+                pricing,
+                res.usage.prompt_tokens,
+                res.usage.completion_tokens,
+            );
             tracing::debug!(
                 accumulated_cost = tracker.accumulated_cost,
                 "Recorded LLM cost for {}",

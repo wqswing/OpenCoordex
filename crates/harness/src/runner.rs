@@ -2,7 +2,9 @@ use crate::evaluator::AssertionEvaluator;
 use crate::schema::{RunStatus, Suite, SuiteResult, TestCase, TestCaseResult};
 use async_trait::async_trait;
 use multi_agent_controller::{ReActConfig, ReActController};
-use multi_agent_core::traits::{ChatMessage, Controller, LlmClient, SessionStore, Tool, ToolRegistry};
+use multi_agent_core::traits::{
+    ChatMessage, Controller, LlmClient, SessionStore, Tool, ToolRegistry,
+};
 use multi_agent_core::types::{AgentResult, ToolDefinition, ToolOutput, UserIntent};
 use multi_agent_core::{LlmResponse, LlmUsage};
 use multi_agent_store::InMemorySessionStore;
@@ -97,7 +99,10 @@ pub struct HarnessMockToolRegistry {
 
 impl HarnessMockToolRegistry {
     pub fn new(inner: Arc<dyn ToolRegistry>, mock_outputs: HashMap<String, String>) -> Self {
-        Self { inner, mock_outputs }
+        Self {
+            inner,
+            mock_outputs,
+        }
     }
 }
 
@@ -135,7 +140,11 @@ impl ToolRegistry for HarnessMockToolRegistry {
         Ok(list)
     }
 
-    async fn execute(&self, name: &str, args: serde_json::Value) -> multi_agent_core::Result<ToolOutput> {
+    async fn execute(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> multi_agent_core::Result<ToolOutput> {
         if let Some(val) = self.mock_outputs.get(name) {
             return Ok(ToolOutput::text(val.clone()));
         }
@@ -179,7 +188,10 @@ impl HarnessRunner {
 
         // 2. Prepare Tool Registry
         let test_tools: Arc<dyn ToolRegistry> = match &test_case.mock_tool_outputs {
-            Some(mocks) => Arc::new(HarnessMockToolRegistry::new(self.tool_registry.clone(), mocks.clone())),
+            Some(mocks) => Arc::new(HarnessMockToolRegistry::new(
+                self.tool_registry.clone(),
+                mocks.clone(),
+            )),
             None => self.tool_registry.clone(),
         };
 
@@ -189,6 +201,7 @@ impl HarnessRunner {
             default_budget: test_case.token_budget.unwrap_or(50000),
             persist_state: true,
             temperature: 0.0, // Low temperature for reproducibility
+            ..ReActConfig::default()
         };
 
         let session_store = Arc::new(InMemorySessionStore::new());
@@ -231,16 +244,30 @@ impl HarnessRunner {
         // 6. Handle Execution Output
         let (actual_output, execute_status, init_fail_reason) = match run_outcome {
             Ok(AgentResult::Text(text)) => (text, RunStatus::Passed, None),
-            Ok(AgentResult::File { ref_id, filename, .. }) => (format!("File: {} (ref: {})", filename, ref_id.as_str()), RunStatus::Passed, None),
+            Ok(AgentResult::File {
+                ref_id, filename, ..
+            }) => (
+                format!("File: {} (ref: {})", filename, ref_id.as_str()),
+                RunStatus::Passed,
+                None,
+            ),
             Ok(AgentResult::Data(val)) => (val.to_string(), RunStatus::Passed, None),
-            Ok(AgentResult::UiComponent { component_type, .. }) => (format!("UI Component: {}", component_type), RunStatus::Passed, None),
+            Ok(AgentResult::UiComponent { component_type, .. }) => (
+                format!("UI Component: {}", component_type),
+                RunStatus::Passed,
+                None,
+            ),
             Ok(AgentResult::Error { message, code }) => {
                 let status = if code == "BUDGET_EXCEEDED" {
                     RunStatus::Timeout
                 } else {
                     RunStatus::Error
                 };
-                (format!("Error: {} (code: {})", message, code), status, Some(message))
+                (
+                    format!("Error: {} (code: {})", message, code),
+                    status,
+                    Some(message),
+                )
             }
             Err(e) => {
                 let err_msg = e.to_string();

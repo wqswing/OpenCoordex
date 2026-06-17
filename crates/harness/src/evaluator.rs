@@ -36,10 +36,7 @@ impl AssertionEvaluator {
                 } else {
                     Ok((
                         false,
-                        Some(format!(
-                            "Output did not contain substring: '{}'",
-                            substring
-                        )),
+                        Some(format!("Output did not contain substring: '{}'", substring)),
                     ))
                 }
             }
@@ -51,10 +48,7 @@ impl AssertionEvaluator {
                 } else {
                     Ok((
                         false,
-                        Some(format!(
-                            "Output did not match regex pattern: '{}'",
-                            pattern
-                        )),
+                        Some(format!("Output did not match regex pattern: '{}'", pattern)),
                     ))
                 }
             }
@@ -76,9 +70,8 @@ impl AssertionEvaluator {
                 match jsonschema::JSONSchema::compile(schema) {
                     Ok(compiled_schema) => {
                         if let Err(errors) = compiled_schema.validate(&parsed_json) {
-                            let error_messages: Vec<String> = errors
-                                .map(|e| e.to_string())
-                                .collect();
+                            let error_messages: Vec<String> =
+                                errors.map(|e| e.to_string()).collect();
                             Ok((
                                 false,
                                 Some(format!(
@@ -149,10 +142,7 @@ Respond ONLY with a JSON object in this format:
                             )),
                         }
                     }
-                    Err(e) => Ok((
-                        false,
-                        Some(format!("LLM Judge invocation failed: {}", e)),
-                    )),
+                    Err(e) => Ok((false, Some(format!("LLM Judge invocation failed: {}", e)))),
                 }
             }
         }

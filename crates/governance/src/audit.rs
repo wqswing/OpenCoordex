@@ -54,6 +54,9 @@ pub trait AuditStore: Send + Sync {
 
     /// Query audit logs with optional filters.
     async fn query(&self, filter: AuditFilter) -> Result<Vec<AuditEntry>>;
+
+    /// Verify the integrity of the audit logs.
+    async fn verify_integrity(&self) -> Result<bool>;
 }
 
 /// In-memory audit store for testing.
@@ -100,6 +103,10 @@ impl AuditStore for InMemoryAuditStore {
 
         Ok(result)
     }
+
+    async fn verify_integrity(&self) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 #[async_trait]
@@ -117,16 +124,29 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 /// Secure audit store using SQLite and Hash Chaining.
+/// Secure audit store using SQLite and Hash Chaining.
 pub struct SqliteAuditStore {
-    conn: Arc<Mutex<Connection>>,
+    db_path: std::path::PathBuf,
+    pool: Arc<Mutex<Vec<Connection>>>,
 }
 
 impl SqliteAuditStore {
     pub fn new(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        let conn = Connection::open(path)
+        let db_path = path.as_ref().to_path_buf();
+        let conn = Connection::open(&db_path)
             .map_err(|e| multi_agent_core::error::Error::Governance(format!("DB error: {}", e)))?;
 
-        // Initialize schema
+        // Initialize schema, indices, WAL mode
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|e| {
+                multi_agent_core::error::Error::Governance(format!("Busy timeout error: {}", e))
+            })?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;",
+        )
+        .map_err(|e| multi_agent_core::error::Error::Governance(format!("PRAGMA error: {}", e)))?;
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS audit_logs (
                 id TEXT PRIMARY KEY,
@@ -143,16 +163,37 @@ impl SqliteAuditStore {
         )
         .map_err(|e| multi_agent_core::error::Error::Governance(format!("Schema error: {}", e)))?;
 
-        // Index for performance
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs (user_id)",
             [],
         )
         .map_err(|e| multi_agent_core::error::Error::Governance(format!("Index error: {}", e)))?;
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-        })
+        let pool = Arc::new(Mutex::new(vec![conn]));
+        Ok(Self { db_path, pool })
+    }
+
+    fn get_connection(&self) -> Result<Connection> {
+        let mut pool = self.pool.lock().unwrap();
+        if let Some(conn) = pool.pop() {
+            Ok(conn)
+        } else {
+            let conn = Connection::open(&self.db_path).map_err(|e| {
+                multi_agent_core::error::Error::Governance(format!("DB open error: {}", e))
+            })?;
+            conn.busy_timeout(std::time::Duration::from_secs(5))
+                .map_err(|e| {
+                    multi_agent_core::error::Error::Governance(format!("Busy timeout error: {}", e))
+                })?;
+            conn.execute_batch(
+                "PRAGMA journal_mode=WAL;
+                 PRAGMA synchronous=NORMAL;",
+            )
+            .map_err(|e| {
+                multi_agent_core::error::Error::Governance(format!("PRAGMA error: {}", e))
+            })?;
+            Ok(conn)
+        }
     }
 
     fn calculate_hash(entry: &AuditEntry, prev_hash: Option<&str>) -> String {
@@ -180,9 +221,10 @@ impl SqliteAuditStore {
 #[async_trait]
 impl AuditStore for SqliteAuditStore {
     async fn log(&self, mut entry: AuditEntry) -> Result<()> {
-        let conn = self.conn.clone();
+        let pool = self.pool.clone();
+        let conn_res = self.get_connection();
         tokio::task::spawn_blocking(move || {
-            let mut conn = conn.lock().unwrap();
+            let mut conn = conn_res?;
             let tx = conn.transaction()
                 .map_err(|e| multi_agent_core::error::Error::Governance(format!("Tx error: {}", e)))?;
 
@@ -207,7 +249,7 @@ impl AuditStore for SqliteAuditStore {
                     entry.action,
                     entry.resource,
                     serde_json::to_string(&entry.outcome).unwrap_or_default(),
-                    entry.metadata.map(|m| m.to_string()),
+                    entry.metadata.as_ref().map(|m| m.to_string()),
                     entry.previous_hash,
                     entry.hash
                 ],
@@ -215,6 +257,12 @@ impl AuditStore for SqliteAuditStore {
 
             tx.commit()
                 .map_err(|e| multi_agent_core::error::Error::Governance(format!("Commit error: {}", e)))?;
+
+            // Release connection back to pool
+            let mut p = pool.lock().unwrap();
+            if p.len() < 10 {
+                p.push(conn);
+            }
             Ok(())
         })
         .await
@@ -222,9 +270,10 @@ impl AuditStore for SqliteAuditStore {
     }
 
     async fn query(&self, filter: AuditFilter) -> Result<Vec<AuditEntry>> {
-        let conn = self.conn.clone();
+        let pool = self.pool.clone();
+        let conn_res = self.get_connection();
         tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().unwrap();
+            let conn = conn_res?;
             let mut query = "SELECT id, timestamp, user_id, action, resource, outcome, metadata, previous_hash, hash FROM audit_logs WHERE 1=1".to_string();
             let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -246,28 +295,127 @@ impl AuditStore for SqliteAuditStore {
                 query.push_str(&format!(" LIMIT {}", limit));
             }
 
-            let mut stmt = conn.prepare(&query)
-                .map_err(|e| multi_agent_core::error::Error::Governance(format!("Prepare error: {}", e)))?;
+            let entries = {
+                let mut stmt = conn.prepare(&query)
+                    .map_err(|e| multi_agent_core::error::Error::Governance(format!("Prepare error: {}", e)))?;
 
-            let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+                let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
-            let entries = stmt.query_map(&param_refs[..], |row| {
-                Ok(AuditEntry {
-                    id: row.get(0)?,
-                    timestamp: row.get(1)?,
-                    user_id: row.get(2)?,
-                    action: row.get(3)?,
-                    resource: row.get(4)?,
-                    outcome: serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or(AuditOutcome::Success),
-                    metadata: row.get::<_, Option<String>>(6)?.and_then(|m| serde_json::from_str(&m).ok()),
-                    previous_hash: row.get(7)?,
-                    hash: row.get(8)?,
-                })
-            }).map_err(|e| multi_agent_core::error::Error::Governance(format!("Query error: {}", e)))?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| multi_agent_core::error::Error::Governance(format!("Result error: {}", e)))?;
+                let res = stmt.query_map(&param_refs[..], |row| {
+                    Ok(AuditEntry {
+                        id: row.get(0)?,
+                        timestamp: row.get(1)?,
+                        user_id: row.get(2)?,
+                        action: row.get(3)?,
+                        resource: row.get(4)?,
+                        outcome: serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or(AuditOutcome::Success),
+                        metadata: row.get::<_, Option<String>>(6)?.and_then(|m| serde_json::from_str(&m).ok()),
+                        previous_hash: row.get(7)?,
+                        hash: row.get(8)?,
+                    })
+                }).map_err(|e| multi_agent_core::error::Error::Governance(format!("Query error: {}", e)))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| multi_agent_core::error::Error::Governance(format!("Result error: {}", e)))?;
+
+                res
+            };
+
+            // Release connection back to pool
+            let mut p = pool.lock().unwrap();
+            if p.len() < 10 {
+                p.push(conn);
+            }
 
             Ok(entries)
+        })
+        .await
+        .map_err(|e| multi_agent_core::error::Error::Internal(e.to_string()))?
+    }
+
+    async fn verify_integrity(&self) -> Result<bool> {
+        let pool = self.pool.clone();
+        let conn_res = self.get_connection();
+        tokio::task::spawn_blocking(move || {
+            let conn = conn_res?;
+
+            let mut prev_hash: Option<String> = None;
+            let mut last_timestamp = String::new();
+            let mut last_rowid = 0;
+            let limit = 1000;
+            let mut is_valid = true;
+
+            loop {
+                // Fetch next batch of entries using cursor pagination
+                let mut stmt = conn.prepare(
+                    "SELECT id, timestamp, user_id, action, resource, outcome, metadata, previous_hash, hash, rowid 
+                     FROM audit_logs 
+                     WHERE (timestamp > ?1) OR (timestamp = ?1 AND rowid > ?2) 
+                     ORDER BY timestamp ASC, rowid ASC 
+                     LIMIT ?3"
+                ).map_err(|e| multi_agent_core::error::Error::Governance(format!("Prepare error: {}", e)))?;
+
+                let mut rows = stmt.query(params![last_timestamp, last_rowid, limit])
+                    .map_err(|e| multi_agent_core::error::Error::Governance(format!("Query error: {}", e)))?;
+
+                let mut count = 0;
+                while let Some(row) = rows.next().map_err(|e| multi_agent_core::error::Error::Governance(format!("Row error: {}", e)))? {
+                    count += 1;
+                    let (entry, rowid) = (|| -> std::result::Result<(AuditEntry, i64), rusqlite::Error> {
+                        let rowid: i64 = row.get(9)?;
+                        let entry = AuditEntry {
+                            id: row.get(0)?,
+                            timestamp: row.get(1)?,
+                            user_id: row.get(2)?,
+                            action: row.get(3)?,
+                            resource: row.get(4)?,
+                            outcome: serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or(AuditOutcome::Success),
+                            metadata: row.get::<_, Option<String>>(6)?.and_then(|m| serde_json::from_str(&m).ok()),
+                            previous_hash: row.get(7)?,
+                            hash: row.get(8)?,
+                        };
+                        Ok((entry, rowid))
+                    })().map_err(|e| multi_agent_core::error::Error::Governance(format!("Parse error: {}", e)))?;
+
+                    last_timestamp = entry.timestamp.clone();
+                    last_rowid = rowid;
+
+                    if entry.previous_hash != prev_hash {
+                        tracing::error!(
+                            entry_id = %entry.id,
+                            expected = ?prev_hash,
+                            actual = ?entry.previous_hash,
+                            "Audit integrity violation: previous_hash mismatch"
+                        );
+                        is_valid = false;
+                        break;
+                    }
+
+                    let calculated = Self::calculate_hash(&entry, entry.previous_hash.as_deref());
+                    if Some(&calculated) != entry.hash.as_ref() {
+                        tracing::error!(
+                            entry_id = %entry.id,
+                            expected = ?entry.hash,
+                            calculated = %calculated,
+                            "Audit integrity violation: hash value mismatch"
+                        );
+                        is_valid = false;
+                        break;
+                    }
+
+                    prev_hash = entry.hash;
+                }
+
+                if !is_valid || count < limit {
+                    break;
+                }
+            }
+
+            // Release connection back to pool
+            let mut p = pool.lock().unwrap();
+            if p.len() < 10 {
+                p.push(conn);
+            }
+            Ok(is_valid)
         })
         .await
         .map_err(|e| multi_agent_core::error::Error::Internal(e.to_string()))?
@@ -277,16 +425,100 @@ impl AuditStore for SqliteAuditStore {
 #[async_trait]
 impl Erasable for SqliteAuditStore {
     async fn erase_user(&self, user_id: &str) -> Result<usize> {
-        let conn = self.conn.clone();
-        let uid = user_id.to_string();
+        let pool = self.pool.clone();
+        let conn_res = self.get_connection();
+        let target_uid = user_id.to_string();
         tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().unwrap();
-            let count = conn
-                .execute("DELETE FROM audit_logs WHERE user_id = ?", params![uid])
-                .map_err(|e| {
-                    multi_agent_core::error::Error::Governance(format!("Delete error: {}", e))
-                })?;
-            Ok(count)
+            let mut conn = conn_res?;
+            let tx = conn.transaction()
+                .map_err(|e| multi_agent_core::error::Error::Governance(format!("Tx error: {}", e)))?;
+
+            // 1. Fetch all entries ordered by timestamp ASC, rowid ASC
+            // 1. Fetch all entries ordered by timestamp ASC, rowid ASC
+            let entries = {
+                let mut stmt = tx.prepare(
+                    "SELECT id, timestamp, user_id, action, resource, outcome, metadata, previous_hash, hash, rowid 
+                     FROM audit_logs 
+                     ORDER BY timestamp ASC, rowid ASC"
+                ).map_err(|e| multi_agent_core::error::Error::Governance(format!("Prepare error: {}", e)))?;
+
+                let mut rows = stmt.query([]).map_err(|e| multi_agent_core::error::Error::Governance(format!("Query error: {}", e)))?;
+
+                let mut entries = Vec::new();
+                while let Some(row) = rows.next().map_err(|e| multi_agent_core::error::Error::Governance(format!("Row error: {}", e)))? {
+                    let (entry, rowid) = (|| -> std::result::Result<(AuditEntry, i64), rusqlite::Error> {
+                        let rowid: i64 = row.get(9)?;
+                        let entry = AuditEntry {
+                            id: row.get(0)?,
+                            timestamp: row.get(1)?,
+                            user_id: row.get(2)?,
+                            action: row.get(3)?,
+                            resource: row.get(4)?,
+                            outcome: serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or(AuditOutcome::Success),
+                            metadata: row.get::<_, Option<String>>(6)?.and_then(|m| serde_json::from_str(&m).ok()),
+                            previous_hash: row.get(7)?,
+                            hash: row.get(8)?,
+                        };
+                        Ok((entry, rowid))
+                    })().map_err(|e| multi_agent_core::error::Error::Governance(format!("Parse error: {}", e)))?;
+
+                    entries.push((entry, rowid));
+                }
+                entries
+            };
+
+            // 2. Iterate, redact target user, and recalculate all hashes
+            let mut prev_hash: Option<String> = None;
+            let mut redacted_count = 0;
+
+            for (mut entry, rowid) in entries {
+                let mut is_modified = false;
+                if entry.user_id == target_uid {
+                    entry.user_id = "REDACTED".to_string();
+                    entry.metadata = None;
+                    is_modified = true;
+                    redacted_count += 1;
+                }
+
+                if entry.previous_hash != prev_hash {
+                    entry.previous_hash = prev_hash.clone();
+                    is_modified = true;
+                }
+
+                let new_hash = Self::calculate_hash(&entry, prev_hash.as_deref());
+                if entry.hash.as_ref() != Some(&new_hash) {
+                    entry.hash = Some(new_hash.clone());
+                    is_modified = true;
+                }
+
+                if is_modified {
+                    tx.execute(
+                        "UPDATE audit_logs 
+                         SET user_id = ?1, previous_hash = ?2, hash = ?3, metadata = ?4 
+                         WHERE rowid = ?5",
+                        params![
+                            entry.user_id,
+                            entry.previous_hash,
+                            entry.hash,
+                            entry.metadata.as_ref().map(|m| m.to_string()),
+                            rowid
+                        ]
+                    ).map_err(|e| multi_agent_core::error::Error::Governance(format!("Update error: {}", e)))?;
+                }
+
+                prev_hash = entry.hash;
+            }
+
+            tx.commit()
+                .map_err(|e| multi_agent_core::error::Error::Governance(format!("Commit error: {}", e)))?;
+
+            // Release connection back to pool
+            let mut p = pool.lock().unwrap();
+            if p.len() < 10 {
+                p.push(conn);
+            }
+
+            Ok(redacted_count)
         })
         .await
         .map_err(|e| multi_agent_core::error::Error::Internal(e.to_string()))?
