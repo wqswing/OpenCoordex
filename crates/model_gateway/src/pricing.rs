@@ -104,7 +104,7 @@ impl PricingRegistry {
     /// Get all models sorted by quality (best first).
     pub fn sorted_by_quality(&self) -> Vec<&ModelPricing> {
         let mut models: Vec<_> = self.models.values().collect();
-        models.sort_by(|a, b| b.quality_score.cmp(&a.quality_score));
+        models.sort_by_key(|b| std::cmp::Reverse(b.quality_score));
         models
     }
 
