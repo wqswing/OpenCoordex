@@ -449,7 +449,8 @@ async fn main() -> anyhow::Result<()> {
         .with_controller(controller)
         .with_logs_channel(logs_tx.clone())
         .with_approval_gate(approval_gate.clone())
-        .with_routing_policy_store(routing_policy_store.clone());
+        .with_routing_policy_store(routing_policy_store.clone())
+        .with_tiered_client(tiered_client.clone());
 
     tracing::info!(
         host = %gateway_config.host,

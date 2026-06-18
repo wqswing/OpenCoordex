@@ -15,6 +15,7 @@ OpenCoordex is a production-grade, layered multi-agent platform built in Rust. I
 - **Autonomous Agents**: Uses the ReAct (Reason+Act) pattern to solve complex, multi-step problems.
 - **Workflow Orchestration**: Supports parallel execution of tasks via DAGs and SOPs defined in YAML.
 - **Adaptive Tiered Routing**: Automatically routes tasks to different LLM tiers (Fast, Standard, Premium) based on task complexity and execution cost.
+- **LLM Gateway Proxy**: Exposes a standard, OpenAI-compatible `/v1/chat/completions` endpoint for secure, multi-tenant proxy routing with in-flight classification and cryptographic cost tracking.
 - **Long-Term Memory**: RAG-enabled memory with Qdrant vector database integration.
 - **Model Context Protocol (MCP)**: Full support for connecting and managing external tool servers.
 
@@ -142,6 +143,19 @@ kill $PID
 ```
 
 ## 📖 Usage Examples
+
+### OpenAI-Compatible Proxy (LLM Gateway)
+```bash
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin_token>" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "user", "content": "Heavy reasoning task: FINAL ANSWER: hello"}
+    ]
+  }'
+```
 
 ### Chat (ReAct Agent)
 ```bash

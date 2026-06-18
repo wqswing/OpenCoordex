@@ -6,19 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [v1.10.0] - 2026-06-17
 
-### 🧪 Evaluation Harness & LLM Routing
-- **Test Harness**: Introduced `multi_agent_harness` supporting test case assertions (exact match, contains, regex, json-schema, LLM judge), suites execution, and mock controller loops.
-- **Complexity-Based LLM Routing**: Implemented `TieredRoutingLlmClient` dynamically routing requests to `Fast`, `Standard`, or `Premium` models, integrated with `SessionCostTracker` for cost calculation.
+### 🌐 Standalone LLM Gateway & 智能调度
+- **独立 LLM Gateway 服务模式 (Standalone LLM Gateway Service)**: 将底层的 `multi_agent_model_gateway` 升级为独立的 HTTP 反向代理网关。新增标准的 OpenAI 兼容端点 `/v1/chat/completions`，支持多租户 Token 验证、请求解包映射与结果打包。
+- **企业级 Token 精细化控制与多级 LLM 智能分发路由 (Enterprise LLM Tiering & Complexity Routing)**: 基于输入 Prompt 复杂度与 Token 预算，自动将请求分发至 `Fast`、`Standard` 与 `Premium` 模型层级。结合 `SessionCostTracker` 实时记录并拦截超预算请求。
 
-### 🛡️ Enterprise KYA & Access Control
-- **KYA Attestation**: Integrated KYA properties (agent ID, agent type, model name, and system prompt SHA-256 fingerprint hash) inside `ApprovalRequest`.
-- **Separation of Duties (SoD)**: Enforced role-based clearances (Admin, Security Officer, Compliance, Operator) checking against tool risk levels on `ChannelApprovalGate` before executions.
-- **OIDC/JWT Authentication Context**: Extracted auth details from REST and WebSocket endpoints to pass context to the gate.
+### 🧪 自动化评测套件 (Evaluation Harness)
+- **评测套件与基准测试 (Test Harness)**: 引入独立的 `multi_agent_harness` 模块，支持配置化的测试集（Suite）和测试用例（TestCase）。支持多种形式的断言校验（精确匹配、子串包含、正则表达式匹配、JSON Schema 格式校验以及基于大模型的 LLM Judge 判定）。
 
-### 💾 Cryptographic Audit Trail Optimizations
-- **Connection Pooling & WAL**: Optimized `SqliteAuditStore` with thread-safe connection pooling, SQLite WAL mode, and a 5-second busy timeout.
-- **GDPR Redaction & Re-Chaining**: Re-implemented `erase_user` to redact records while recompute hash chains to maintain audit cryptographic validity.
-- **Cursor Paginated Verification**: Re-implemented integrity verification using a 1,000-row paginated cursor to avoid memory OOMs on large databases.
+### 🛡️ KYA 理念、职责分离与多级审批权限校验
+- **KYA (Know Your Agent) 理念落地**: 在 `ApprovalRequest` 中引入不可篡改的 Agent 凭证（包括 Agent ID、Agent 类型、运行模型以及系统提示词 SHA-256 指纹哈希），确保 Agent 的每一项敏感行为都具备清晰的密码学身份锚定。
+- **职责分配与多级审批权限校验 (Separation of Duties - SoD)**: 重构审批流拦截器，根据工具风险等级（Medium, High, Critical）强制校验审批用户的 RBAC 角色权限（Admin, Security Officer, Compliance, Operator），防止越权审批，强化多级级联风控。
+- **用户上下文插入 (OIDC/JWT Context)**: 从 OIDC 校验后的请求扩展中提取用户身份，实现端到端的责任归属追溯。
+
+### 💾 吞吐性能、合规性与不可篡改审计链优化
+- **防篡改与不可篡改审计链路 (Immutable Audit Trails)**: 引入 SHA-256 块哈希链机制，强关联上一条审计记录的 Hash 签名，实现防篡改审计日志。任何绕过系统的物理修改都将引发链式校验失败。
+- **吞吐性能优化：启用 SQLite 数据库连接池与 WAL 模式**: 为 `SqliteAuditStore` 引入线程安全的轻量级连接池，全面开启 **WAL (Write-Ahead Logging)** 预写日志与 `NORMAL` 同步模式，配置 5 秒 Busy Timeout，在高并发吞吐下彻底消除 SQLite 锁冲突。
+- **合规性优化：兼容 GDPR 的“被遗忘权”脱敏审计链**: 实现 `erase_user` GDPR 脱敏清空接口。在满足用户隐私擦除需求时，对日志进行 `"REDACTED"` 替换并清空敏感元数据，同时**自动链式重算后续所有数据行的哈希值与父链指向**，在保障合规脱敏的前提下维系密码学审计链路的完整性和校验通过。
+- **内存与稳定性优化：基于游标 (Cursor) 的分页审计完整性校验**: 重构 `verify_integrity` 链式校验算法，使用基于游标的 SQL 分页拉取机制（每次加载 1,000 条），在校验包含数十万条记录的长链路时防止内存 OOM 崩溃，保证极佳的系统稳定性。
 
 ## [Unreleased] - 2026-02-18
 

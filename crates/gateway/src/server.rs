@@ -101,6 +101,8 @@ pub struct AppState {
     pub controller_scheduler: Arc<ControllerScheduler>,
     /// Shared versioned routing policy store.
     pub routing_policy_store: Option<Arc<RoutingPolicyStore>>,
+    /// Tiered routing LLM client.
+    pub tiered_client: Option<Arc<multi_agent_model_gateway::TieredRoutingLlmClient>>,
 }
 
 impl AppState {
@@ -151,6 +153,7 @@ impl GatewayServer {
                 idempotency_store: Arc::new(IdempotencyStore::new()),
                 controller_scheduler: Arc::new(ControllerScheduler::default()),
                 routing_policy_store: None,
+                tiered_client: None,
             }),
             metrics_handle: None,
             admin_state: None,
@@ -246,6 +249,17 @@ impl GatewayServer {
         self
     }
 
+    /// Set tiered routing LLM client.
+    pub fn with_tiered_client(
+        mut self,
+        client: Arc<multi_agent_model_gateway::TieredRoutingLlmClient>,
+    ) -> Self {
+        if let Some(state) = Arc::get_mut(&mut self.state) {
+            state.tiered_client = Some(client);
+        }
+        self
+    }
+
     /// Build the Axum router.
     pub fn build_router(&self) -> Router {
         // System Routes
@@ -298,6 +312,15 @@ impl GatewayServer {
             .route("/v1/chat", post(chat_handler))
             .route("/v1/intent", post(intent_handler))
             .route("/v1/webhook/:event_type", post(webhook_handler))
+            .route(
+                "/v1/chat/completions",
+                post(openai_chat_completions_handler).route_layer(
+                    axum::middleware::from_fn_with_state(
+                        self.state.clone(),
+                        bearer_auth_middleware,
+                    ),
+                ),
+            )
             .route(
                 "/v1/approve/:request_id",
                 post(approve_rest_handler).route_layer(axum::middleware::from_fn_with_state(
@@ -1325,6 +1348,218 @@ async fn chat_handler(
         .into_response()
 }
 
+/// OpenAI-compatible chat completions request.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenAiChatRequest {
+    pub model: String,
+    pub messages: Vec<OpenAiMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+}
+
+/// OpenAI-compatible message.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenAiMessage {
+    pub role: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// OpenAI-compatible chat completions response.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenAiChatResponse {
+    pub id: String,
+    pub object: String,
+    pub created: u64,
+    pub model: String,
+    pub choices: Vec<OpenAiChoice>,
+    pub usage: OpenAiUsage,
+}
+
+/// OpenAI-compatible choice.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenAiChoice {
+    pub index: u32,
+    pub message: OpenAiMessage,
+    pub finish_reason: String,
+}
+
+/// OpenAI-compatible usage.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OpenAiUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+}
+
+async fn openai_chat_completions_handler(
+    State(state): State<Arc<AppState>>,
+    user_ctx: Option<axum::Extension<multi_agent_governance::rbac::UserContext>>,
+    user_roles: Option<axum::Extension<multi_agent_governance::rbac::UserRoles>>,
+    Json(payload): Json<OpenAiChatRequest>,
+) -> impl IntoResponse {
+    let user_id = if let Some(axum::Extension(u)) = user_ctx {
+        u.user_id.clone()
+    } else if let Some(axum::Extension(u)) = user_roles {
+        u.user_id.clone()
+    } else {
+        "anonymous".to_string()
+    };
+
+    let client = match &state.tiered_client {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": {
+                        "message": "LLM Gateway tiered routing client is not configured on this server.",
+                        "type": "internal_error",
+                        "code": "tiered_client_missing"
+                    }
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    if payload.stream.unwrap_or(false) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": {
+                    "message": "Streaming completions are not supported by the gateway.",
+                    "type": "invalid_request_error",
+                    "code": "streaming_not_supported"
+                }
+            })),
+        )
+            .into_response();
+    }
+
+    use multi_agent_core::traits::{ChatMessage, LlmClient};
+    use multi_agent_core::types::ModelTier;
+
+    let chat_messages: Vec<ChatMessage> = payload
+        .messages
+        .iter()
+        .map(|msg| ChatMessage {
+            role: msg.role.clone(),
+            content: msg.content.clone(),
+            tool_calls: None,
+        })
+        .collect();
+
+    // Call tiered client to execute chat completion
+    match client.chat(&chat_messages).await {
+        Ok(llm_res) => {
+            // Determine resolved model tier and details
+            let tier = client.classify_messages(&chat_messages);
+            let resolved_model = match tier {
+                ModelTier::Fast => "openai:gpt-4o-mini",
+                ModelTier::Standard => "openai:gpt-4o",
+                ModelTier::Premium => "anthropic:claude-3-5-sonnet-20241022",
+            };
+
+            let prompt_tokens = llm_res.usage.prompt_tokens;
+            let completion_tokens = llm_res.usage.completion_tokens;
+            let total_tokens = llm_res.usage.total_tokens;
+
+            // Fetch pricing for cost calculation
+            let pricing_registry = multi_agent_model_gateway::PricingRegistry::with_defaults();
+            let cost = pricing_registry
+                .get(resolved_model)
+                .map(|p| p.estimate_cost(prompt_tokens, completion_tokens))
+                .unwrap_or(0.0);
+
+            // Log cryptographic audit trail if admin state is present
+            if let Some(admin_state) = &state.admin_state {
+                let _ = admin_state
+                    .audit_store
+                    .log(multi_agent_governance::AuditEntry {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        user_id: user_id.clone(),
+                        action: "chat_completions".to_string(),
+                        resource: resolved_model.to_string(),
+                        outcome: multi_agent_governance::AuditOutcome::Success,
+                        metadata: Some(serde_json::json!({
+                            "requested_model": payload.model,
+                            "resolved_model": resolved_model,
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": total_tokens,
+                            "cost": cost,
+                        })),
+                        previous_hash: None,
+                        hash: None,
+                    })
+                    .await;
+            }
+
+            // Construct standard OpenAI chat completion response
+            let response = OpenAiChatResponse {
+                id: format!("chatcmpl-{}", uuid::Uuid::new_v4()),
+                object: "chat.completion".to_string(),
+                created: chrono::Utc::now().timestamp() as u64,
+                model: resolved_model.to_string(),
+                choices: vec![OpenAiChoice {
+                    index: 0,
+                    message: OpenAiMessage {
+                        role: "assistant".to_string(),
+                        content: llm_res.content,
+                        name: None,
+                    },
+                    finish_reason: llm_res.finish_reason,
+                }],
+                usage: OpenAiUsage {
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                },
+            };
+
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            tracing::error!("LLM Gateway chat completion failed: {}", e);
+            if let Some(admin_state) = &state.admin_state {
+                let _ = admin_state
+                    .audit_store
+                    .log(multi_agent_governance::AuditEntry {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        user_id: user_id.clone(),
+                        action: "chat_completions".to_string(),
+                        resource: payload.model.clone(),
+                        outcome: multi_agent_governance::AuditOutcome::Error(e.to_string()),
+                        metadata: Some(serde_json::json!({
+                            "requested_model": payload.model,
+                        })),
+                        previous_hash: None,
+                        hash: None,
+                    })
+                    .await;
+            }
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": {
+                        "message": format!("LLM Gateway completion failed: {}", e),
+                        "type": "api_error",
+                        "code": "completion_failed"
+                    }
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// Intent classification handler (for debugging/testing).
 async fn intent_handler(
     State(state): State<Arc<AppState>>,
@@ -1926,6 +2161,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new()),
             controller_scheduler: Arc::new(ControllerScheduler::default()),
             routing_policy_store: None,
+            tiered_client: None,
         });
 
         let app = Router::new()

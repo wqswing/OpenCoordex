@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use multi_agent_controller::ReActController;
 use multi_agent_core::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ToolRegistry};
 use multi_agent_gateway::{DefaultRouter, GatewayConfig, GatewayServer, InMemorySemanticCache};
+use multi_agent_governance::AuditStore;
 use multi_agent_skills::{CalculatorTool, DefaultToolRegistry, EchoTool};
 use multi_agent_store::InMemorySessionStore;
 use serde_json::json;
@@ -339,4 +340,141 @@ async fn start_test_server(
     });
 
     Ok((addr, handle))
+}
+
+#[tokio::test]
+async fn test_system_llm_gateway_proxy_endpoint() -> anyhow::Result<()> {
+    let responses =
+        vec!["FINAL ANSWER: Hello! I am routing this request via the proxy gateway.".to_string()];
+    let llm_mock = Arc::new(ScriptedMockLlm::new(responses));
+
+    // Setup tiered routing client
+    let model_registry = Arc::new(multi_agent_model_gateway::ProviderRegistry::new());
+    model_registry.register("openai", "gpt-4o-mini", llm_mock.clone());
+    model_registry.register("openai", "gpt-4o", llm_mock.clone());
+    model_registry.register("anthropic", "claude-3-5-sonnet-20241022", llm_mock.clone());
+
+    let model_selector = Arc::new(multi_agent_model_gateway::AdaptiveModelSelector::new(
+        model_registry,
+    ));
+    let pricing_registry = Arc::new(multi_agent_model_gateway::PricingRegistry::with_defaults());
+    let cost_tracker = Arc::new(tokio::sync::Mutex::new(
+        multi_agent_model_gateway::SessionCostTracker::new(),
+    ));
+
+    let tiered_client = Arc::new(multi_agent_model_gateway::TieredRoutingLlmClient::new(
+        model_selector,
+        pricing_registry,
+        cost_tracker,
+    ));
+
+    // Setup AdminState and AuditStore
+    let audit_store = Arc::new(multi_agent_governance::InMemoryAuditStore::new());
+    let rbac = Arc::new(multi_agent_governance::NoOpRbacConnector);
+    let secrets_path = std::path::PathBuf::from("test_secrets_proxy.json");
+    // Cleanup old file if exists
+    let _ = std::fs::remove_file(&secrets_path);
+    let secrets = Arc::new(
+        multi_agent_governance::secrets::FilePersistentSecretsManager::new(
+            secrets_path.clone(),
+            None,
+        )
+        .await?,
+    );
+
+    let mut app_config = multi_agent_core::config::AppConfig::default();
+    app_config.governance.admin_token = Some(secrecy::Secret::new("admin_secret".to_string()));
+
+    let admin_state = Arc::new(multi_agent_admin::AdminState {
+        audit_store: audit_store.clone() as Arc<dyn multi_agent_governance::AuditStore>,
+        rbac: rbac as Arc<dyn multi_agent_governance::RbacConnector>,
+        metrics: None,
+        mcp_registry: Arc::new(multi_agent_skills::McpRegistry::new()),
+        providers: Arc::new(tokio::sync::RwLock::new(Vec::new())),
+        provider_store: None,
+        secrets,
+        privacy_controller: None,
+        artifact_store: None,
+        session_store: None,
+        app_config: app_config.clone(),
+        network_policy: Arc::new(tokio::sync::RwLock::new(
+            multi_agent_governance::network::NetworkPolicy::new(vec![], vec![], vec![]),
+        )),
+        llm_client: None,
+        tool_registry: None,
+    });
+
+    let router = Arc::new(DefaultRouter::new());
+    let cache = Arc::new(InMemorySemanticCache::new(llm_mock.clone()));
+
+    let config = GatewayConfig {
+        host: "127.0.0.1".to_string(),
+        port: 0,
+        ..Default::default()
+    };
+
+    let server = GatewayServer::new(config, router, cache)
+        .with_admin(admin_state)
+        .with_tiered_client(tiered_client);
+
+    let axum_router = server.build_router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum_router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/v1/chat/completions", addr);
+
+    // Call completions endpoint using the admin token
+    let payload = json!({
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Heavy reasoning task: FINAL ANSWER: hello"}
+        ],
+        "temperature": 0.7,
+        "stream": false
+    });
+
+    let resp = client
+        .post(&url)
+        .header("x-admin-token", "admin_secret")
+        .json(&payload)
+        .send()
+        .await?;
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await?;
+
+    // Verify OpenAI-compatible structure
+    assert!(body["id"].as_str().unwrap().starts_with("chatcmpl-"));
+    assert_eq!(body["object"], "chat.completion");
+    assert_eq!(
+        body["choices"][0]["message"]["content"],
+        "FINAL ANSWER: Hello! I am routing this request via the proxy gateway."
+    );
+    assert_eq!(body["choices"][0]["message"]["role"], "assistant");
+    assert_eq!(body["choices"][0]["finish_reason"], "stop");
+
+    // Clean up test file
+    let _ = std::fs::remove_file(&secrets_path);
+
+    // Verify audit log has the record
+    let filter = multi_agent_governance::AuditFilter {
+        action: Some("chat_completions".to_string()),
+        ..Default::default()
+    };
+    let entries: Vec<multi_agent_governance::AuditEntry> = audit_store.query(filter).await?;
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].action, "chat_completions");
+    assert_eq!(entries[0].resource, "anthropic:claude-3-5-sonnet-20241022"); // Routed to Premium since prompt contains heavy reasoning keywords
+
+    Ok(())
 }
