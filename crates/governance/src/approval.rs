@@ -91,10 +91,8 @@ impl ChannelApprovalGate {
                         best_role = Some("compliance");
                     }
                 }
-                "operator" => {
-                    if best_role.is_none() {
-                        best_role = Some("operator");
-                    }
+                "operator" if best_role.is_none() => {
+                    best_role = Some("operator");
                 }
                 _ => {}
             }
