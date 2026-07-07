@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2026-07-07
+
+### 🔍 Jacobian Lens (J-space) 认知审计与对齐
+- **GWT 全局工作空间状态提炼 (Active Workspace Extraction)**: 实现了 `ActiveWorkspaceCapability`。在 ReAct 推理循环前动态压缩提炼当前的 Objective、Constraints 与 Verified facts，防范长历史上下文导致的注意力衰减与安全规则漂移。
+- **隐式 Steering 注意力导向 (Implicit Steering Injection)**: 在 `TieredRoutingLlmClient` 对接 Premium（高危/高复度）模型请求时，自动注入合规、真诚和防欺骗底线 prompt 指针，从概率上约束模型行为。
+
+### 🛡️ 沙箱动态约束拦截与主动心理拷问 (Dynamic Sandboxing & Proactive Grilling)
+- **沙箱约束动态传递与执行拦截 (Sandbox Constraint Listener & Enforcement)**: 在 core 层中引入 `ConstraintListener` 观察者模式。沙箱管理器 (`SandboxManager`) 订阅 J-space 限制（如 `No python`、`Read-Only`），并在执行 shell 指令/写文件操作前进行动态强力阻断，抛出 `SecurityViolation` 异常。
+- **影子主动心理拷问插件 (Proactive Grilling Capability)**: 在 `AgentCapability` Trait 中新增前置 `on_tool_proposed` 拦截生命周期。当高危工具（如 `sandbox_shell`）触发时，自动克隆影子会话并抛出反事实安全红线问询，结合 Judge LLM 进行评估以防范欺骗式对齐（Deceptive Alignment）。
+
+### 🧠 开源本地模型 J-lens 表征概念投影 (Local J-lens Projection)
+- **隐藏层对齐概念投影探针 (Local J-lens Evaluator)**: 在 `multi_agent_model_gateway` 中新增 `LocalJLensEvaluator`，模拟或计算本地开源大模型（Llama/Qwen）词表 Unembedding 表征层梯度，将隐藏状态投影至 honesty, evasion 和 deception 探针方向，实时测算异常风险。
+
+### 🖥️ 审计控制面板与鉴权 (Cognitive Control Plane UI)
+- **认知审计 API 端点与鉴权拦截 (Cognitive Audit APIs)**: 增加具备管理员与审计员级 RBAC Bearer 鉴权锁的 `/cognitive/metrics` 与 `/cognitive/anomalies` 端点。
+- **可视化 J-space 活性看板 (Live GWT Sidebar Dashboard)**: 仪表盘侧边栏新增“认知审计”板块，实时加载三轴活性指标、审计异常历史清单以及 manual override 处理操作。
+
 ## [v1.10.0] - 2026-06-17
 
 ### 🌐 Standalone LLM Gateway & 智能调度

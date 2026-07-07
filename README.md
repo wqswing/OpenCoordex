@@ -5,7 +5,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/wqswing/MultiAgent-AI/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Version](https://img.shields.io/badge/version-1.10.0-orange.svg)](https://github.com/wqswing/OpenCoordex/releases/tag/v1.10.0)
+[![Version](https://img.shields.io/badge/version-1.2.0-orange.svg)](https://github.com/wqswing/OpenCoordex/releases/tag/v1.2.0)
 
 OpenCoordex is a production-grade, layered multi-agent platform built in Rust. It is designed for enterprise orchestration of LLM capabilities, supporting multi-modal inputs, autonomous reasoning (ReAct), complex workflow automation (DAG/SOP), and robust governance features such as semantic caching, vector memory, and circuit breakers.
 
@@ -27,6 +27,9 @@ OpenCoordex is a production-grade, layered multi-agent platform built in Rust. I
 - **Circuit Breaker**: Automatic failure detection and isolation for LLM providers.
 
 ### 🛡️ Governance & Security
+- **Jacobian Lens Cognitive Auditing**: Preserves state constraints derived from GWT J-space and dynamically enforces them inside isolated sandbox environments.
+- **Proactive Mental Grilling**: Actively interviews the executing agent before running high-risk tool actions using counterfactual safety probes to prevent deceptive alignment.
+- **Local J-lens Projection Hook**: Computes dot-product projections of hidden representation layers onto vocabulary alignment concepts (honesty, evasion, deception) to estimate real-time anomaly risks.
 - **Unified Egress Control**: Centralized `fetch_with_policy` mechanism enforcing allow/deny lists, IP filtering, and SSRF protection for all outbound requests.
 - **Policy-Driven Approval**: Risk-based human-in-the-loop approval gates triggered by configurable thresholds in `policy.yaml`.
 - **Typed Gateway Contracts**: Stable request/response/event schemas with explicit error codes for public APIs.
