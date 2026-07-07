@@ -285,10 +285,12 @@ impl HarnessRunner {
         let mut failure_reason = init_fail_reason;
 
         if final_status == RunStatus::Passed {
+            let history_json = serde_json::to_string(&history).ok();
             let eval_outcome = AssertionEvaluator::evaluate(
                 &actual_output,
                 &test_case.expected_output,
                 self.judge_llm.as_ref().map(|x| x.as_ref()),
+                history_json.as_deref(),
             )
             .await;
 

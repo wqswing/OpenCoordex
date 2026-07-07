@@ -30,7 +30,7 @@ pub use audit::{
 pub use budget::TokenBudgetController;
 pub use guardrails::{
     CompositeGuardrail, Guardrail, GuardrailResult, PiiScanner, PromptInjectionDetector,
-    ViolationType,
+    ViolationType, CognitiveIntentGuardrail,
 };
 pub use metrics::{setup_metrics_recorder, track_request, track_tokens};
 pub use policy::{PolicyDecision, PolicyEngine, PolicyFile, PolicyRule, RuleAction, RuleMatch};

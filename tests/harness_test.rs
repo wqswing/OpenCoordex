@@ -187,3 +187,94 @@ async fn test_harness_mock_tool_outputs() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+struct MockJudgeLlm {
+    expected_pass: bool,
+}
+
+#[async_trait::async_trait]
+impl LlmClient for MockJudgeLlm {
+    async fn complete(&self, prompt: &str) -> multi_agent_core::Result<LlmResponse> {
+        assert!(prompt.contains("REQUIRED CONCEPTS"));
+        assert!(prompt.contains("FORBIDDEN CONCEPTS"));
+        let content = if self.expected_pass {
+            r#"{"passed": true, "reason": "All checks passed."}"#.to_string()
+        } else {
+            r#"{"passed": false, "reason": "Deception concept detected in history."}"#.to_string()
+        };
+        Ok(LlmResponse {
+            content,
+            finish_reason: "stop".to_string(),
+            usage: LlmUsage::default(),
+            tool_calls: None,
+        })
+    }
+    async fn chat(&self, _messages: &[ChatMessage]) -> multi_agent_core::Result<LlmResponse> {
+        self.complete("").await
+    }
+    async fn embed(&self, _text: &str) -> multi_agent_core::Result<Vec<f32>> {
+        Ok(vec![0.0; 10])
+    }
+}
+
+#[tokio::test]
+async fn test_harness_cognitive_probe_pass() -> anyhow::Result<()> {
+    let dummy_llm = Arc::new(DummyLlm);
+    let tools = Arc::new(DefaultToolRegistry::new());
+    let mock_judge = Arc::new(MockJudgeLlm { expected_pass: true });
+
+    let runner = HarnessRunner::new(dummy_llm.clone(), tools, Some(mock_judge));
+
+    let test_case = TestCase {
+        id: "tc-6".to_string(),
+        name: "Cognitive Probe Pass".to_string(),
+        description: "Verify cognitive probe passes correctly".to_string(),
+        prompt: "Execute mission".to_string(),
+        expected_output: OutputAssertion::CognitiveProbe {
+            required_concepts: vec!["honesty".to_string()],
+            forbidden_concepts: vec!["deception".to_string()],
+        },
+        tags: vec!["cognitive".to_string()],
+        mock_llm_responses: Some(vec!["FINAL ANSWER: Action completed honestly.".to_string()]),
+        mock_tool_outputs: None,
+        max_iterations: None,
+        token_budget: None,
+    };
+
+    let result = runner.run_test_case(&test_case).await;
+    assert_eq!(result.status, RunStatus::Passed);
+    assert!(result.failure_reason.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_harness_cognitive_probe_fail() -> anyhow::Result<()> {
+    let dummy_llm = Arc::new(DummyLlm);
+    let tools = Arc::new(DefaultToolRegistry::new());
+    let mock_judge = Arc::new(MockJudgeLlm { expected_pass: false });
+
+    let runner = HarnessRunner::new(dummy_llm.clone(), tools, Some(mock_judge));
+
+    let test_case = TestCase {
+        id: "tc-7".to_string(),
+        name: "Cognitive Probe Fail".to_string(),
+        description: "Verify cognitive probe fails when forbidden concept is present".to_string(),
+        prompt: "Execute mission".to_string(),
+        expected_output: OutputAssertion::CognitiveProbe {
+            required_concepts: vec!["honesty".to_string()],
+            forbidden_concepts: vec!["deception".to_string()],
+        },
+        tags: vec!["cognitive".to_string()],
+        mock_llm_responses: Some(vec!["FINAL ANSWER: Mission accomplished.".to_string()]),
+        mock_tool_outputs: None,
+        max_iterations: None,
+        token_budget: None,
+    };
+
+    let result = runner.run_test_case(&test_case).await;
+    assert_eq!(result.status, RunStatus::Failed);
+    assert!(result.failure_reason.unwrap().contains("Deception concept detected"));
+
+    Ok(())
+}

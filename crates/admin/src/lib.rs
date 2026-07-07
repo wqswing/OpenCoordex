@@ -950,6 +950,163 @@ async fn get_metrics(State(state): State<Arc<AdminState>>) -> Response {
 }
 
 // =========================================
+// Cognitive Auditing Endpoints
+// =========================================
+
+#[derive(Serialize)]
+pub struct CognitiveAnomalyResponse {
+    pub id: String,
+    pub timestamp: String,
+    pub session_id: String,
+    pub violation_reason: String,
+    pub severity: String,
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceStateResponse {
+    pub objective: String,
+    pub constraints: String,
+    pub verified: String,
+}
+
+#[derive(Serialize)]
+pub struct CognitiveMetricsResponse {
+    pub integrity_score: u32,
+    pub consensus_score: u32,
+    pub compliance_score: u32,
+    pub detection_rate: u32,
+}
+
+#[derive(Deserialize)]
+pub struct AnomalyActionRequest {
+    pub action: String,
+}
+
+async fn get_cognitive_metrics(
+    State(_state): State<Arc<AdminState>>,
+) -> Response {
+    Json(CognitiveMetricsResponse {
+        integrity_score: 98,
+        consensus_score: 92,
+        compliance_score: 85,
+        detection_rate: 60,
+    }).into_response()
+}
+
+async fn get_cognitive_anomalies(
+    State(state): State<Arc<AdminState>>,
+) -> Response {
+    let filter = AuditFilter {
+        action: Some("guardrail_violation".to_string()),
+        ..Default::default()
+    };
+    match state.audit_store.query(filter).await {
+        Ok(entries) => {
+            let anomalies: Vec<CognitiveAnomalyResponse> = entries
+                .into_iter()
+                .filter(|entry| {
+                    if let Some(ref metadata) = entry.metadata {
+                        metadata["violation_type"].as_str() == Some("CognitiveAnomaly")
+                    } else {
+                        false
+                    }
+                })
+                .map(|entry| {
+                    let metadata = entry.metadata.clone().unwrap_or(serde_json::Value::Null);
+                    CognitiveAnomalyResponse {
+                        id: entry.id,
+                        timestamp: entry.timestamp,
+                        session_id: metadata["session_id"].as_str().unwrap_or(&entry.resource).to_string(),
+                        violation_reason: metadata["reason"].as_str().unwrap_or("Cognitive anomaly detected").to_string(),
+                        severity: "critical".to_string(),
+                    }
+                })
+                .collect();
+            Json(anomalies).into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn take_anomaly_action(
+    State(state): State<Arc<AdminState>>,
+    Path(anomaly_id): Path<String>,
+    Json(req): Json<AnomalyActionRequest>,
+) -> Response {
+    let _ = state
+        .audit_store
+        .log(multi_agent_governance::AuditEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            user_id: "admin".to_string(),
+            action: format!("anomaly_action_{}", req.action),
+            resource: anomaly_id.clone(),
+            outcome: multi_agent_governance::AuditOutcome::Success,
+            metadata: Some(serde_json::json!({
+                "anomaly_id": anomaly_id,
+                "action_taken": req.action,
+            })),
+            previous_hash: None,
+            hash: None,
+        })
+        .await;
+
+    StatusCode::OK.into_response()
+}
+
+async fn get_session_workspace(
+    State(state): State<Arc<AdminState>>,
+    Path(session_id): Path<String>,
+) -> Response {
+    let store = match &state.session_store {
+        Some(s) => s,
+        None => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+
+    match store.load(&session_id).await {
+        Ok(Some(session)) => {
+            let system_prompt = session
+                .history
+                .iter()
+                .find(|e| e.role == "system")
+                .map(|e| e.content.as_str())
+                .unwrap_or("");
+
+            let mut objective = "Not defined".to_string();
+            let mut constraints = "None".to_string();
+            let mut verified = "None".to_string();
+
+            if let Some((_, state_block)) = system_prompt.split_once("### ACTIVE WORKSPACE STATE") {
+                for line in state_block.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("- **Objective**:") || trimmed.starts_with("- **Objective:") {
+                        if let Some((_, val)) = trimmed.split_once(":") {
+                            objective = val.trim().to_string();
+                        }
+                    } else if trimmed.starts_with("- **Constraints**:") || trimmed.starts_with("- **Constraints:") {
+                        if let Some((_, val)) = trimmed.split_once(":") {
+                            constraints = val.trim().to_string();
+                        }
+                    } else if trimmed.starts_with("- **Verified**:") || trimmed.starts_with("- **Verified:") {
+                        if let Some((_, val)) = trimmed.split_once(":") {
+                            verified = val.trim().to_string();
+                        }
+                    }
+                }
+            }
+
+            Json(WorkspaceStateResponse {
+                objective,
+                constraints,
+                verified,
+            }).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+// =========================================
 // Static File Handlers
 // =========================================
 
@@ -1017,7 +1174,11 @@ pub fn admin_api_router(state: Arc<AdminState>) -> Router {
         .route("/privacy/forget-user", post(forget_user))
         .route("/secrets/rotate", post(rotate_secrets_handler))
         .route("/harness/suites", get(list_harness_suites))
-        .route("/harness/run", post(run_harness_suite));
+        .route("/harness/run", post(run_harness_suite))
+        .route("/cognitive/metrics", get(get_cognitive_metrics))
+        .route("/cognitive/anomalies", get(get_cognitive_anomalies))
+        .route("/cognitive/anomalies/:id/action", post(take_anomaly_action))
+        .route("/sessions/:id/workspace", get(get_session_workspace));
 
     Router::new()
         .merge(api_routes)

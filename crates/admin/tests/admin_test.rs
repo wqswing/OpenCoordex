@@ -217,3 +217,87 @@ async fn test_admin_harness_endpoints() {
     assert_eq!(result["suite_id"], "diagnostic-suite");
     assert_eq!(result["total_cases"], 3);
 }
+
+#[tokio::test]
+async fn test_admin_cognitive_endpoints() {
+    let audit_store = Arc::new(InMemoryAuditStore::new());
+    let rbac = Arc::new(NoOpRbacConnector);
+    let mcp_registry = Arc::new(McpRegistry::new());
+    let secrets = Arc::new(AesGcmSecretsManager::new(None));
+    let providers = Arc::new(RwLock::new(Vec::new()));
+
+    let state = Arc::new(AdminState {
+        audit_store: audit_store.clone(),
+        rbac,
+        metrics: None,
+        mcp_registry,
+        providers,
+        provider_store: None,
+        secrets,
+        privacy_controller: None,
+        artifact_store: None,
+        session_store: None,
+        app_config: multi_agent_core::config::AppConfig::default(),
+        network_policy: Arc::new(RwLock::new(NetworkPolicy::default())),
+        llm_client: None,
+        tool_registry: None,
+    });
+
+    let app = multi_agent_admin::admin_router(state);
+
+    // 1. Check cognitive metrics
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/cognitive/metrics")
+                .header("Authorization", "Bearer admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let metrics: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(metrics["integrity_score"], 98);
+
+    // 2. Check anomalies (should be empty initially)
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/cognitive/anomalies")
+                .header("Authorization", "Bearer admin")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let anomalies: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(anomalies.as_array().unwrap().len(), 0);
+
+    // 3. Trigger action on a mock anomaly
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/cognitive/anomalies/mock-id/action")
+                .header("Authorization", "Bearer admin")
+                .header("Content-Type", "application/json")
+                .body(Body::from(json!({ "action": "resolve" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

@@ -25,6 +25,7 @@ pub struct SandboxManager {
     config: SandboxConfig,
     active_sandbox: tokio::sync::RwLock<Option<SandboxId>>,
     event_emitter: Option<Arc<dyn multi_agent_core::traits::EventEmitter>>,
+    active_constraints: std::sync::RwLock<Vec<String>>,
 }
 
 impl SandboxManager {
@@ -35,6 +36,7 @@ impl SandboxManager {
             config,
             active_sandbox: tokio::sync::RwLock::new(None),
             event_emitter: None,
+            active_constraints: std::sync::RwLock::new(Vec::new()),
         }
     }
 
@@ -86,6 +88,19 @@ impl SandboxManager {
     /// Check if the sandbox backend is available.
     pub async fn is_available(&self) -> bool {
         self.engine.is_available().await
+    }
+
+    /// Get active constraints.
+    pub fn get_constraints(&self) -> Vec<String> {
+        self.active_constraints.read().unwrap().clone()
+    }
+}
+
+impl multi_agent_core::traits::ConstraintListener for SandboxManager {
+    fn update_constraints(&self, constraints: Vec<String>) {
+        if let Ok(mut guard) = self.active_constraints.write() {
+            *guard = constraints;
+        }
     }
 }
 
@@ -146,6 +161,31 @@ impl Tool for SandboxShellTool {
             .get("command")
             .and_then(|v| v.as_str())
             .ok_or_else(|| multi_agent_core::Error::invalid_request("command is required"))?;
+
+        // Check active constraints
+        let constraints = self.manager.get_constraints();
+        for c in &constraints {
+            let lower_c = c.to_lowercase();
+            if lower_c.contains("no python") && command.to_lowercase().contains("python") {
+                return Err(multi_agent_core::Error::SecurityViolation(format!(
+                    "Command blocked by active workspace constraint: {}",
+                    c
+                )));
+            }
+            if lower_c.contains("read-only") || lower_c.contains("no write") {
+                let lower_cmd = command.to_lowercase();
+                if lower_cmd.contains("echo ") && lower_cmd.contains(">")
+                    || lower_cmd.contains("touch ")
+                    || lower_cmd.contains("rm ")
+                    || lower_cmd.contains("mkdir ")
+                {
+                    return Err(multi_agent_core::Error::SecurityViolation(format!(
+                        "Write command blocked by read-only workspace constraint: {}",
+                        c
+                    )));
+                }
+            }
+        }
 
         let timeout_secs = args
             .get("timeout_secs")
@@ -261,6 +301,18 @@ impl Tool for SandboxWriteFileTool {
             .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| multi_agent_core::Error::invalid_request("content is required"))?;
+
+        // Check active constraints
+        let constraints = self.manager.get_constraints();
+        for c in &constraints {
+            let lower_c = c.to_lowercase();
+            if lower_c.contains("read-only") || lower_c.contains("no write") {
+                return Err(multi_agent_core::Error::SecurityViolation(format!(
+                    "Writing to path {} blocked by read-only workspace constraint: {}",
+                    path, c
+                )));
+            }
+        }
 
         // Security: validate path using fs_policy
         let validated_path = multi_agent_core::fs_policy::validate_sandbox_path("/workspace", path)
@@ -444,6 +496,7 @@ impl Tool for SandboxListFilesTool {
 mod tests {
     use super::*;
     use crate::engine::{ExecResult, MockSandbox};
+    use multi_agent_core::traits::ConstraintListener;
 
     fn make_manager(responses: Vec<ExecResult>) -> Arc<SandboxManager> {
         let engine = Arc::new(MockSandbox::new(responses));
@@ -565,5 +618,37 @@ mod tests {
         // Second call returns same
         let id2 = manager.get_or_create().await.unwrap();
         assert_eq!(id1.0, id2.0);
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_dynamic_constraints_no_python() {
+        let manager = make_manager(vec![]);
+        // Implement ConstraintListener manually or call update_constraints
+        manager.update_constraints(vec!["Constraint: No Python".to_string()]);
+
+        let tool = SandboxShellTool::new(manager);
+        let result = tool.execute(json!({"command": "python script.py"})).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("blocked by active workspace constraint"));
+    }
+
+    #[tokio::test]
+    async fn test_sandbox_dynamic_constraints_read_only() {
+        let manager = make_manager(vec![]);
+        manager.update_constraints(vec!["Constraint: Read-Only mode".to_string()]);
+
+        let write_tool = SandboxWriteFileTool::new(manager.clone());
+        let shell_tool = SandboxShellTool::new(manager);
+
+        // 1. Write file tool should be blocked
+        let w_res = write_tool.execute(json!({"path": "foo.txt", "content": "bar"})).await;
+        assert!(w_res.is_err());
+        assert!(w_res.unwrap_err().to_string().contains("blocked by read-only workspace constraint"));
+
+        // 2. Write commands in shell tool should be blocked
+        let s_res = shell_tool.execute(json!({"command": "touch hello.txt"})).await;
+        assert!(s_res.is_err());
+        assert!(s_res.unwrap_err().to_string().contains("blocked by read-only workspace constraint"));
     }
 }

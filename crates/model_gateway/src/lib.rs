@@ -8,12 +8,14 @@
 //! - Rig LLM client adapter
 
 pub mod config;
+pub mod jlens;
 pub mod pricing;
 pub mod providers;
 pub mod rig_client;
 pub mod routing_client;
 pub mod selector;
 
+pub use jlens::{JLensLayerScore, JLensTrace, LocalJLensEvaluator};
 pub use pricing::{ModelPricing, PricingRegistry, SessionCostTracker};
 pub use providers::{MockLlmClient, ProviderRegistry};
 pub use rig_client::{create_default_client, RigConfig, RigLlmClient, RigProvider};

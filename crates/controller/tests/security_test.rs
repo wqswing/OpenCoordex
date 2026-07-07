@@ -66,3 +66,55 @@ async fn test_security_pii_violation() {
 
     assert!(err.contains("Security violation"));
 }
+
+struct MockToolProposingLlm;
+
+#[async_trait]
+impl LlmClient for MockToolProposingLlm {
+    async fn complete(&self, _prompt: &str) -> multi_agent_core::Result<LlmResponse> {
+        Ok(LlmResponse {
+            content: "FAIL".to_string(),
+            finish_reason: "stop".to_string(),
+            usage: LlmUsage::default(),
+            tool_calls: None,
+        })
+    }
+
+    async fn chat(&self, _messages: &[ChatMessage]) -> multi_agent_core::Result<LlmResponse> {
+        Ok(LlmResponse {
+            content: "THOUGHT: I will run a shell command.\nACTION: sandbox_shell\nARGS: {\"command\": \"whoami\"}".to_string(),
+            finish_reason: "stop".to_string(),
+            usage: LlmUsage::default(),
+            tool_calls: None,
+        })
+    }
+
+    async fn embed(&self, _text: &str) -> multi_agent_core::Result<Vec<f32>> {
+        Ok(vec![0.0; 10])
+    }
+}
+
+#[tokio::test]
+async fn test_grilling_integration_failure() {
+    let config = ReActConfig::default();
+    let llm = Arc::new(MockToolProposingLlm);
+    let cap = Arc::new(multi_agent_controller::GrillingCapability::new(llm.clone()));
+
+    let controller = ReActController::builder()
+        .with_config(config)
+        .with_llm(llm)
+        .with_capability(cap)
+        .build();
+
+    let intent = UserIntent::ComplexMission {
+        goal: "Run some commands".to_string(),
+        context_summary: "".to_string(),
+        visual_refs: vec![],
+        user_id: None,
+    };
+
+    let result = controller.execute(intent, "test-trace-grill".to_string()).await;
+    assert!(result.is_err());
+    let err = result.err().unwrap().to_string();
+    assert!(err.contains("Active grilling audit failed"));
+}

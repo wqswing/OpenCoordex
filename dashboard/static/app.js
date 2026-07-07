@@ -26,7 +26,8 @@ document.querySelectorAll('.nav-menu .nav-item').forEach(link => {
             research: 'Research Runs',
             approvals: 'Pending Approvals',
             domains: 'Network Governance',
-            harness: 'Test Harness'
+            harness: 'Test Harness',
+            cognitive: 'Cognitive Security Audit'
         };
         const pageTitle = document.getElementById('page-title');
         if (pageTitle) pageTitle.textContent = titles[tab] || tab;
@@ -38,6 +39,8 @@ document.querySelectorAll('.nav-menu .nav-item').forEach(link => {
         // Lazy load harness suites if harness tab is active
         if (tab === 'harness') {
             loadHarnessSuites();
+        } else if (tab === 'cognitive') {
+            loadCognitiveData();
         }
     });
 });
@@ -1111,6 +1114,135 @@ function escapeHtml(str) {
 }
 
 // =========================================
+// Cognitive Security Audit
+// =========================================
+async function loadCognitiveData() {
+    loadCognitiveMetrics();
+    loadCognitiveSessions();
+    loadCognitiveAnomalies();
+}
+
+async function loadCognitiveMetrics() {
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/cognitive/metrics`);
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('cog-stat-integrity').textContent = `${data.integrity_score}%`;
+            document.getElementById('cog-stat-consensus').textContent = `${data.consensus_score}%`;
+            document.getElementById('cog-stat-compliance').textContent = `${data.compliance_score}%`;
+            document.getElementById('cog-stat-detection').textContent = `${data.detection_rate}%`;
+        }
+    } catch (err) {
+        console.error('Failed to load cognitive metrics', err);
+    }
+}
+
+async function loadCognitiveSessions() {
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/sessions`);
+        if (res.ok) {
+            const sessions = await res.json();
+            const select = document.getElementById('cog-session-select');
+            if (select) {
+                // Keep the first option
+                select.innerHTML = '<option value="">Select an active session...</option>';
+                sessions.forEach(sess => {
+                    const opt = document.createElement('option');
+                    opt.value = sess.id;
+                    opt.textContent = `${sess.id.substring(0, 8)}... (${sess.status})`;
+                    select.appendChild(opt);
+                });
+            }
+        }
+    } catch (err) {
+        console.error('Failed to load sessions', err);
+    }
+}
+
+// Session selection change handler
+document.getElementById('cog-session-select')?.addEventListener('change', async (e) => {
+    const sessionId = e.target.value;
+    if (!sessionId) {
+        document.getElementById('workspace-goal').textContent = '--';
+        document.getElementById('workspace-constraints').textContent = '--';
+        document.getElementById('workspace-verified').textContent = '--';
+        return;
+    }
+
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/sessions/${sessionId}/workspace`);
+        if (res.ok) {
+            const ws = await res.json();
+            document.getElementById('workspace-goal').textContent = ws.objective;
+            document.getElementById('workspace-constraints').textContent = ws.constraints;
+            document.getElementById('workspace-verified').textContent = ws.verified;
+        } else {
+            document.getElementById('workspace-goal').textContent = 'Workspace state not active or empty';
+            document.getElementById('workspace-constraints').textContent = 'None';
+            document.getElementById('workspace-verified').textContent = 'None';
+        }
+    } catch (err) {
+        console.error('Failed to fetch workspace state', err);
+    }
+});
+
+async function loadCognitiveAnomalies() {
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/cognitive/anomalies`);
+        if (res.ok) {
+            const list = await res.json();
+            const container = document.getElementById('cog-anomalies-list');
+            if (!container) return;
+
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">No cognitive anomalies detected.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            container.innerHTML = list.map(item => `
+                <tr id="anomaly-${item.id}">
+                    <td style="font-family: monospace; font-size: 13px; font-weight: 600; color: var(--warning);">${item.id.substring(0, 8)}</td>
+                    <td style="font-size: 13px; color: var(--text-muted);">${new Date(item.timestamp).toLocaleString()}</td>
+                    <td style="font-family: monospace; font-size: 13px;">${item.session_id.substring(0, 8)}...</td>
+                    <td style="font-size: 13px; font-weight: 500; color: var(--text-main);">${escapeHtml(item.violation_reason)}</td>
+                    <td>
+                        <span class="badge ${item.severity === 'critical' ? 'danger' : 'warning'}">${item.severity}</span>
+                    </td>
+                    <td>
+                        <button onclick="resolveAnomaly('${item.id}', 'resolve')" class="btn-primary btn-sm" style="padding: 4px 8px; font-size: 12px; border-radius: 4px;">
+                            <i class="fa-solid fa-check"></i> Resolve
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) {
+        console.error('Failed to load cognitive anomalies', err);
+    }
+}
+
+window.resolveAnomaly = async (id, action) => {
+    if (!confirm(`Are you sure you want to ${action} anomaly ${id}?`)) return;
+    try {
+        const res = await fetchWithAuth(`${API_BASE}/cognitive/anomalies/${id}/action`, {
+            method: 'POST',
+            body: JSON.stringify({ action })
+        });
+        if (res.ok) {
+            loadCognitiveAnomalies();
+        } else {
+            alert('Failed to execute action on anomaly');
+        }
+    } catch (err) {
+        console.error('Failed to take action on anomaly', err);
+    }
+};
+
+// =========================================
 // Initial Load
 // =========================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -1123,7 +1255,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPendingApprovals();
     loadDomainGovernance();
     loadHarnessSuites();
+    loadCognitiveData();
 
     // Auto-refresh metrics every 5s
     setInterval(loadMetrics, 5000);
+    setInterval(loadCognitiveMetrics, 5000);
 });

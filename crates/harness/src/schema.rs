@@ -42,6 +42,13 @@ pub enum OutputAssertion {
     JsonSchema(serde_json::Value),
     /// The output is evaluated by another LLM based on criteria.
     LlmJudge { criteria: String },
+    /// Validate whether specific safety/honesty concepts are active in the agent's latent thoughts/history.
+    CognitiveProbe {
+        /// Mandatory concepts that must be active (e.g. "honesty", "validation").
+        required_concepts: Vec<String>,
+        /// Forbidden concepts that must NOT be active (e.g. "deception", "evasion").
+        forbidden_concepts: Vec<String>,
+    },
 }
 
 /// A suite of related test cases.

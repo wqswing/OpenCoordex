@@ -424,6 +424,11 @@ Always think before acting. Be concise and focused on the goal."#
             emitter.emit(event).await;
         }
 
+        // 0. Trigger capabilities on tool proposed (e.g. Grilling)
+        for cap in &self.capabilities {
+            cap.on_tool_proposed(session, &name, &args).await?;
+        }
+
         // =====================================================================
         // Policy Evaluation & HITL Approval Gate
         // =====================================================================

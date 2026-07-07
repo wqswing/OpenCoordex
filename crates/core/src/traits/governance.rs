@@ -58,3 +58,9 @@ pub trait ApprovalGate: Send + Sync {
         crate::types::ToolRiskLevel::High
     }
 }
+
+/// Listener for active workspace constraint updates.
+pub trait ConstraintListener: Send + Sync {
+    /// Update active constraints for the executor/sandbox.
+    fn update_constraints(&self, constraints: Vec<String>);
+}

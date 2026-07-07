@@ -74,6 +74,14 @@
                     </a>
                 </li>
 
+                <li class="nav-label">Cognitive Security</li>
+                <li>
+                    <a href="#" class="nav-item" data-tab="cognitive">
+                        <i class="fa-solid fa-brain"></i>
+                        <span>Cognitive Audit</span>
+                    </a>
+                </li>
+
                 <li class="nav-label">Research & Control</li>
                 <li>
                     <a href="#" class="nav-item" data-tab="research">
@@ -775,6 +783,111 @@
                             <div id="harness-cases-list" class="harness-cases-list" style="display: flex; flex-direction: column; gap: 12px;">
                                 <!-- Test case items go here -->
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cognitive Security Tab -->
+            <section id="cognitive" class="tab-content">
+                <!-- 1. Metrics Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon color-green" style="background: rgba(46, 204, 113, 0.1); color: var(--success);">
+                            <i class="fa-solid fa-shield-heart"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3>Cognitive Integrity</h3>
+                            <div class="stat-value" id="cog-stat-integrity">--</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon color-blue" style="background: rgba(52, 152, 219, 0.1); color: var(--blue);">
+                            <i class="fa-solid fa-users-viewfinder"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3>Consensus Index</h3>
+                            <div class="stat-value" id="cog-stat-consensus">--</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon color-orange" style="background: rgba(230, 126, 34, 0.1); color: var(--warning);">
+                            <i class="fa-solid fa-scale-balanced"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3>Policy Compliance</h3>
+                            <div class="stat-value" id="cog-stat-compliance">--</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon color-purple" style="background: rgba(155, 89, 182, 0.1); color: var(--purple);">
+                            <i class="fa-solid fa-fingerprint"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3>Detection Rate</h3>
+                            <div class="stat-value" id="cog-stat-detection">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. J-space / Workspace Inspector -->
+                <div class="card" style="margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>J-space / Active Workspace Inspector</h3>
+                        <div class="header-actions">
+                            <select id="cog-session-select" class="form-control" style="width: auto; display: inline-block; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main);">
+                                <option value="">Select an active session...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 0;">
+                            <div class="stat-card" style="border: 1px solid var(--border); box-shadow: none;">
+                                <div class="stat-details">
+                                    <span class="stat-subtext" style="text-transform: uppercase; font-weight: 600; color: var(--primary);"><i class="fa-solid fa-bullseye"></i> Current Goal</span>
+                                    <div class="stat-value" id="workspace-goal" style="font-size: 1.1rem; font-weight: 500; margin-top: 8px; white-space: normal;">--</div>
+                                </div>
+                            </div>
+                            <div class="stat-card" style="border: 1px solid var(--border); box-shadow: none;">
+                                <div class="stat-details">
+                                    <span class="stat-subtext" style="text-transform: uppercase; font-weight: 600; color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> Active Constraints</span>
+                                    <div class="stat-value" id="workspace-constraints" style="font-size: 1.1rem; font-weight: 500; margin-top: 8px; white-space: normal;">--</div>
+                                </div>
+                            </div>
+                            <div class="stat-card" style="border: 1px solid var(--border); box-shadow: none;">
+                                <div class="stat-details">
+                                    <span class="stat-subtext" style="text-transform: uppercase; font-weight: 600; color: var(--success);"><i class="fa-solid fa-circle-check"></i> Verified Facts</span>
+                                    <div class="stat-value" id="workspace-verified" style="font-size: 1.1rem; font-weight: 500; margin-top: 8px; white-space: normal;">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Cognitive Anomalies Table -->
+                <div class="card" style="margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>Cognitive Anomalies Detected (CRP Probe Failures)</h3>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Anomaly ID</th>
+                                        <th>Timestamp</th>
+                                        <th>Session ID</th>
+                                        <th>Violation Reason</th>
+                                        <th>Severity</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cog-anomalies-list">
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">No cognitive anomalies detected.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
