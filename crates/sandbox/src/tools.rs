@@ -630,7 +630,10 @@ mod tests {
         let result = tool.execute(json!({"command": "python script.py"})).await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("blocked by active workspace constraint"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("blocked by active workspace constraint"));
     }
 
     #[tokio::test]
@@ -642,13 +645,23 @@ mod tests {
         let shell_tool = SandboxShellTool::new(manager);
 
         // 1. Write file tool should be blocked
-        let w_res = write_tool.execute(json!({"path": "foo.txt", "content": "bar"})).await;
+        let w_res = write_tool
+            .execute(json!({"path": "foo.txt", "content": "bar"}))
+            .await;
         assert!(w_res.is_err());
-        assert!(w_res.unwrap_err().to_string().contains("blocked by read-only workspace constraint"));
+        assert!(w_res
+            .unwrap_err()
+            .to_string()
+            .contains("blocked by read-only workspace constraint"));
 
         // 2. Write commands in shell tool should be blocked
-        let s_res = shell_tool.execute(json!({"command": "touch hello.txt"})).await;
+        let s_res = shell_tool
+            .execute(json!({"command": "touch hello.txt"}))
+            .await;
         assert!(s_res.is_err());
-        assert!(s_res.unwrap_err().to_string().contains("blocked by read-only workspace constraint"));
+        assert!(s_res
+            .unwrap_err()
+            .to_string()
+            .contains("blocked by read-only workspace constraint"));
     }
 }

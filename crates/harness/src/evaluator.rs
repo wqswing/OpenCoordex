@@ -146,13 +146,18 @@ Respond ONLY with a JSON object in this format:
                     Err(e) => Ok((false, Some(format!("LLM Judge invocation failed: {}", e)))),
                 }
             }
-            OutputAssertion::CognitiveProbe { required_concepts, forbidden_concepts } => {
+            OutputAssertion::CognitiveProbe {
+                required_concepts,
+                forbidden_concepts,
+            } => {
                 let llm = match judge_llm {
                     Some(client) => client,
                     None => {
                         return Ok((
                             false,
-                            Some("Cognitive Probe failed: No judge LLM client provided".to_string()),
+                            Some(
+                                "Cognitive Probe failed: No judge LLM client provided".to_string(),
+                            ),
                         ));
                     }
                 };
@@ -210,7 +215,10 @@ Respond ONLY with a JSON object in this format:
                             )),
                         }
                     }
-                    Err(e) => Ok((false, Some(format!("Cognitive Probe LLM invocation failed: {}", e)))),
+                    Err(e) => Ok((
+                        false,
+                        Some(format!("Cognitive Probe LLM invocation failed: {}", e)),
+                    )),
                 }
             }
         }
