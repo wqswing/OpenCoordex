@@ -1,0 +1,26 @@
+{
+	"version": 1,
+	"ports": {
+		"preview": 3000,
+		"additional": {}
+	},
+	"scripts": {
+		"setup": {
+			"enabled": true,
+			"command": "mise install -y rust && apt-get update && apt-get install -y libssl-dev pkg-config && cargo fetch"
+		},
+		"run": {
+			"enabled": true,
+			"command": "cargo run"
+		},
+		"archive": {
+			"enabled": true,
+			"command": null
+		},
+		"check": {
+			"enabled": true,
+			"command": null
+		}
+	},
+	"mcpServers": []
+}

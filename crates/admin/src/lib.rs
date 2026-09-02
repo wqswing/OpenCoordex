@@ -1193,7 +1193,7 @@ pub fn admin_api_router(state: Arc<AdminState>) -> Router {
         .with_state(state)
 }
 
-async fn dashboard_index() -> impl IntoResponse {
+pub async fn dashboard_index() -> impl IntoResponse {
     dashboard_assets(Path("index.html".to_string())).await
 }
 

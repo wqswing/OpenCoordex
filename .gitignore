@@ -23,3 +23,7 @@
 /audit.db
 /audit.db-shm
 /audit.db-wal
+/secrets.json
+*.log-shm
+*.log-wal
+/.hoplite/archive/

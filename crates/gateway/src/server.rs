@@ -363,6 +363,11 @@ impl GatewayServer {
 
             // Management Console (Static assets)
             router = router.nest("/console", multi_agent_admin::admin_static_router());
+            // Also serve the console from the site root and with a trailing slash,
+            // so relative asset links resolve in every entry way.
+            router = router
+                .route("/", get(multi_agent_admin::dashboard_index))
+                .route("/console/", get(multi_agent_admin::dashboard_index));
         }
 
         // Apply rate limiting: Distributed (Redis) or Local (Governor)
