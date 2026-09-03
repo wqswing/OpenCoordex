@@ -99,7 +99,7 @@ async fn test_admin_provider_crud_with_encryption() {
         .await
         .unwrap();
     let list: Value = serde_json::from_slice(&body).unwrap();
-    assert!(list.as_array().unwrap().len() > 0);
+    assert!(!list.as_array().unwrap().is_empty());
 
     // 4. Delete provider
     let response = app
@@ -107,7 +107,7 @@ async fn test_admin_provider_crud_with_encryption() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/providers/{}", provider_id))
+                .uri(format!("/api/providers/{}", provider_id))
                 .header("Authorization", "Bearer admin")
                 .body(Body::empty())
                 .unwrap(),

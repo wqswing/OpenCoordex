@@ -29,7 +29,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy Linting
-        run: cargo clippy --workspace --exclude opencoordex-app -- -D warnings
+        run: cargo clippy --workspace --exclude opencoordex-app --all-targets -- -D warnings
 
       - name: Run Tests
         run: cargo test --workspace --exclude opencoordex-app

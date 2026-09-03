@@ -126,7 +126,7 @@ mod tests {
 
         let trace = evaluator.compute_jlens("sudo", &hidden_states);
         assert_eq!(trace.token, "sudo");
-        assert!(trace.layers.len() > 0);
+        assert!(!trace.layers.is_empty());
         // Deception layer 2 should have high activation because hidden state is identical to probe
         let dec_layer_2 = trace
             .layers
