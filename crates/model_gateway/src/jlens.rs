@@ -41,11 +41,22 @@ impl LocalJLensEvaluator {
     pub fn new() -> Self {
         let mut probes = HashMap::new();
         // 10-dimensional target concept direction vectors in representation space
-        probes.insert("honesty".to_string(), vec![0.8, 0.1, -0.2, 0.4, 0.9, -0.1, 0.3, 0.5, 0.2, -0.4]);
-        probes.insert("evasion".to_string(), vec![-0.5, 0.7, 0.9, -0.3, -0.8, 0.6, -0.2, 0.4, 0.8, 0.7]);
-        probes.insert("deception".to_string(), vec![-0.9, 0.8, 0.7, -0.4, -0.9, 0.9, -0.1, 0.2, 0.9, 0.8]);
+        probes.insert(
+            "honesty".to_string(),
+            vec![0.8, 0.1, -0.2, 0.4, 0.9, -0.1, 0.3, 0.5, 0.2, -0.4],
+        );
+        probes.insert(
+            "evasion".to_string(),
+            vec![-0.5, 0.7, 0.9, -0.3, -0.8, 0.6, -0.2, 0.4, 0.8, 0.7],
+        );
+        probes.insert(
+            "deception".to_string(),
+            vec![-0.9, 0.8, 0.7, -0.4, -0.9, 0.9, -0.1, 0.2, 0.9, 0.8],
+        );
 
-        Self { concept_probes: probes }
+        Self {
+            concept_probes: probes,
+        }
     }
 
     /// Evaluates model hidden states (layers x hidden_dim) and projects them.
@@ -56,13 +67,10 @@ impl LocalJLensEvaluator {
         for (layer_idx, h_state) in hidden_states.iter().enumerate() {
             for (concept, probe) in &self.concept_probes {
                 // Dot product projection
-                let dot_product: f32 = h_state
-                    .iter()
-                    .zip(probe.iter())
-                    .map(|(x, y)| x * y)
-                    .sum();
+                let dot_product: f32 = h_state.iter().zip(probe.iter()).map(|(x, y)| x * y).sum();
                 // Activation sensitivity (simulated gradient)
-                let sensitivity = dot_product.abs() * (1.0 - (layer_idx as f32 / hidden_states.len() as f32));
+                let sensitivity =
+                    dot_product.abs() * (1.0 - (layer_idx as f32 / hidden_states.len() as f32));
 
                 layers.push(JLensLayerScore {
                     layer: layer_idx,
@@ -118,9 +126,13 @@ mod tests {
 
         let trace = evaluator.compute_jlens("sudo", &hidden_states);
         assert_eq!(trace.token, "sudo");
-        assert!(trace.layers.len() > 0);
+        assert!(!trace.layers.is_empty());
         // Deception layer 2 should have high activation because hidden state is identical to probe
-        let dec_layer_2 = trace.layers.iter().find(|l| l.layer == 2 && l.concept_name == "deception").unwrap();
+        let dec_layer_2 = trace
+            .layers
+            .iter()
+            .find(|l| l.layer == 2 && l.concept_name == "deception")
+            .unwrap();
         assert!(dec_layer_2.activation > 5.0);
         assert!(trace.anomaly_risk > 0.8);
     }

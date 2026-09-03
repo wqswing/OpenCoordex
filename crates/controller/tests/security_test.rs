@@ -5,7 +5,6 @@ use multi_agent_core::types::UserIntent;
 use multi_agent_core::LlmUsage;
 use multi_agent_governance::guardrails::{CompositeGuardrail, PiiScanner};
 use std::sync::Arc;
-use tokio;
 
 // Mock LLM Client
 struct MockLlm;
@@ -113,7 +112,9 @@ async fn test_grilling_integration_failure() {
         user_id: None,
     };
 
-    let result = controller.execute(intent, "test-trace-grill".to_string()).await;
+    let result = controller
+        .execute(intent, "test-trace-grill".to_string())
+        .await;
     assert!(result.is_err());
     let err = result.err().unwrap().to_string();
     assert!(err.contains("Active grilling audit failed"));

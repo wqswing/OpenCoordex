@@ -221,11 +221,12 @@ impl McpRegistry {
         self.servers.insert(server.id.clone(), server);
     }
 
-    /// Unregister an MCP server.
-    pub fn unregister(&self, id: &str) -> Option<McpServerInfo> {
+    /// Unregister an MCP server and disconnect its adapter connection.
+    pub async fn unregister(&self, id: &str) -> Option<McpServerInfo> {
         tracing::info!(id = %id, "Unregistering MCP server");
-        // TODO: In a real implementation, we should also signal the adapter to disconnect.
-        // For now, removing from registry prevents future selection.
+        if let Err(e) = self.adapter.disconnect(id).await {
+            tracing::warn!(id = %id, error = %e, "Failed to disconnect MCP adapter");
+        }
         self.servers.remove(id).map(|(_, v)| v)
     }
 

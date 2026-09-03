@@ -59,7 +59,10 @@ impl Default for GatewayConfig {
             port: 3000,
             enable_cors: true,
             enable_tracing: true,
-            allowed_origins: vec!["*".to_string()],
+            allowed_origins: vec![
+                "http://localhost:3000".to_string(),
+                "http://127.0.0.1:3000".to_string(),
+            ],
             tls: TlsConfig {
                 enabled: false,
                 cert_path: None,
@@ -363,6 +366,11 @@ impl GatewayServer {
 
             // Management Console (Static assets)
             router = router.nest("/console", multi_agent_admin::admin_static_router());
+            // Also serve the console from the site root and with a trailing slash,
+            // so relative asset links resolve in every entry way.
+            router = router
+                .route("/", get(multi_agent_admin::dashboard_index))
+                .route("/console/", get(multi_agent_admin::dashboard_index));
         }
 
         // Apply rate limiting: Distributed (Redis) or Local (Governor)

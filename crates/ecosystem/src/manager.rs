@@ -226,7 +226,7 @@ impl PluginManager {
                     registry.register(server_info);
                 }
             } else if registry.contains(&manifest.id) {
-                registry.unregister(&manifest.id);
+                registry.unregister(&manifest.id).await;
             }
         }
     }

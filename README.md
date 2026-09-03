@@ -1,8 +1,8 @@
 # OpenCoordex: Enterprise Open Multi-Agent Platform
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Language](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/wqswing/MultiAgent-AI/actions)
+[![Language](https://img.shields.io/badge/rust-stable-blue.svg)](https://www.rust-lang.org)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/wqswing/OpenCoordex/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Version](https://img.shields.io/badge/version-1.2.0-orange.svg)](https://github.com/wqswing/OpenCoordex/releases/tag/v1.2.0)
@@ -27,9 +27,9 @@ OpenCoordex is a production-grade, layered multi-agent platform built in Rust. I
 - **Circuit Breaker**: Automatic failure detection and isolation for LLM providers.
 
 ### 🛡️ Governance & Security
-- **Jacobian Lens Cognitive Auditing**: Preserves state constraints derived from GWT J-space and dynamically enforces them inside isolated sandbox environments.
+- **Jacobian Lens Cognitive Auditing**: Extracts the agent's active workspace state (objective/constraints/verified facts) before each reasoning loop and re-injects it to preserve alignment constraints across long contexts; violations are enforced inside isolated sandbox environments.
 - **Proactive Mental Grilling**: Actively interviews the executing agent before running high-risk tool actions using counterfactual safety probes to prevent deceptive alignment.
-- **Local J-lens Projection Hook**: Computes dot-product projections of hidden representation layers onto vocabulary alignment concepts (honesty, evasion, deception) to estimate real-time anomaly risks.
+- **Local J-lens Projection Hook**: Computes concept-direction projections onto vocabulary alignment concepts (honesty, evasion, deception) for **simulated/available hidden states**, estimating real-time anomaly risk. Full-hook support for local open-weight models is in development.
 - **Unified Egress Control**: Centralized `fetch_with_policy` mechanism enforcing allow/deny lists, IP filtering, and SSRF protection for all outbound requests.
 - **Policy-Driven Approval**: Risk-based human-in-the-loop approval gates triggered by configurable thresholds in `policy.yaml`.
 - **Typed Gateway Contracts**: Stable request/response/event schemas with explicit error codes for public APIs.

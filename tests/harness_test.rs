@@ -221,7 +221,9 @@ impl LlmClient for MockJudgeLlm {
 async fn test_harness_cognitive_probe_pass() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    let mock_judge = Arc::new(MockJudgeLlm { expected_pass: true });
+    let mock_judge = Arc::new(MockJudgeLlm {
+        expected_pass: true,
+    });
 
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, Some(mock_judge));
 
@@ -252,7 +254,9 @@ async fn test_harness_cognitive_probe_pass() -> anyhow::Result<()> {
 async fn test_harness_cognitive_probe_fail() -> anyhow::Result<()> {
     let dummy_llm = Arc::new(DummyLlm);
     let tools = Arc::new(DefaultToolRegistry::new());
-    let mock_judge = Arc::new(MockJudgeLlm { expected_pass: false });
+    let mock_judge = Arc::new(MockJudgeLlm {
+        expected_pass: false,
+    });
 
     let runner = HarnessRunner::new(dummy_llm.clone(), tools, Some(mock_judge));
 
@@ -274,7 +278,10 @@ async fn test_harness_cognitive_probe_fail() -> anyhow::Result<()> {
 
     let result = runner.run_test_case(&test_case).await;
     assert_eq!(result.status, RunStatus::Failed);
-    assert!(result.failure_reason.unwrap().contains("Deception concept detected"));
+    assert!(result
+        .failure_reason
+        .unwrap()
+        .contains("Deception concept detected"));
 
     Ok(())
 }

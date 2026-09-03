@@ -8,7 +8,7 @@ port = 3000
 # L0 Router settings
 routing_timeout_ms = 500
 semantic_cache_threshold = 0.95
-allowed_origins = ["*"]
+allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 [gateway.tls]
 enabled = false

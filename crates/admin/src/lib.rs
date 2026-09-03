@@ -600,7 +600,7 @@ async fn register_mcp(
 
 /// Remove MCP server.
 async fn remove_mcp(State(state): State<Arc<AdminState>>, Path(id): Path<String>) -> Response {
-    state.mcp_registry.unregister(&id);
+    let _ = state.mcp_registry.unregister(&id).await;
 
     let _ = state
         .audit_store
@@ -982,20 +982,17 @@ pub struct AnomalyActionRequest {
     pub action: String,
 }
 
-async fn get_cognitive_metrics(
-    State(_state): State<Arc<AdminState>>,
-) -> Response {
+async fn get_cognitive_metrics(State(_state): State<Arc<AdminState>>) -> Response {
     Json(CognitiveMetricsResponse {
         integrity_score: 98,
         consensus_score: 92,
         compliance_score: 85,
         detection_rate: 60,
-    }).into_response()
+    })
+    .into_response()
 }
 
-async fn get_cognitive_anomalies(
-    State(state): State<Arc<AdminState>>,
-) -> Response {
+async fn get_cognitive_anomalies(State(state): State<Arc<AdminState>>) -> Response {
     let filter = AuditFilter {
         action: Some("guardrail_violation".to_string()),
         ..Default::default()
@@ -1016,8 +1013,14 @@ async fn get_cognitive_anomalies(
                     CognitiveAnomalyResponse {
                         id: entry.id,
                         timestamp: entry.timestamp,
-                        session_id: metadata["session_id"].as_str().unwrap_or(&entry.resource).to_string(),
-                        violation_reason: metadata["reason"].as_str().unwrap_or("Cognitive anomaly detected").to_string(),
+                        session_id: metadata["session_id"]
+                            .as_str()
+                            .unwrap_or(&entry.resource)
+                            .to_string(),
+                        violation_reason: metadata["reason"]
+                            .as_str()
+                            .unwrap_or("Cognitive anomaly detected")
+                            .to_string(),
                         severity: "critical".to_string(),
                     }
                 })
@@ -1079,15 +1082,21 @@ async fn get_session_workspace(
             if let Some((_, state_block)) = system_prompt.split_once("### ACTIVE WORKSPACE STATE") {
                 for line in state_block.lines() {
                     let trimmed = line.trim();
-                    if trimmed.starts_with("- **Objective**:") || trimmed.starts_with("- **Objective:") {
+                    if trimmed.starts_with("- **Objective**:")
+                        || trimmed.starts_with("- **Objective:")
+                    {
                         if let Some((_, val)) = trimmed.split_once(":") {
                             objective = val.trim().to_string();
                         }
-                    } else if trimmed.starts_with("- **Constraints**:") || trimmed.starts_with("- **Constraints:") {
+                    } else if trimmed.starts_with("- **Constraints**:")
+                        || trimmed.starts_with("- **Constraints:")
+                    {
                         if let Some((_, val)) = trimmed.split_once(":") {
                             constraints = val.trim().to_string();
                         }
-                    } else if trimmed.starts_with("- **Verified**:") || trimmed.starts_with("- **Verified:") {
+                    } else if trimmed.starts_with("- **Verified**:")
+                        || trimmed.starts_with("- **Verified:")
+                    {
                         if let Some((_, val)) = trimmed.split_once(":") {
                             verified = val.trim().to_string();
                         }
@@ -1099,7 +1108,8 @@ async fn get_session_workspace(
                 objective,
                 constraints,
                 verified,
-            }).into_response()
+            })
+            .into_response()
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -1193,7 +1203,7 @@ pub fn admin_api_router(state: Arc<AdminState>) -> Router {
         .with_state(state)
 }
 
-async fn dashboard_index() -> impl IntoResponse {
+pub async fn dashboard_index() -> impl IntoResponse {
     dashboard_assets(Path("index.html".to_string())).await
 }
 

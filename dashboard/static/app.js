@@ -1,6 +1,6 @@
 // OpenCoordex Admin Dashboard JS (v1.0)
 
-const API_BASE = '/admin';
+const API_BASE = '/v1/admin';
 
 // =========================================
 // Tab Navigation
@@ -21,6 +21,10 @@ document.querySelectorAll('.nav-menu .nav-item').forEach(link => {
 
         // Update header title
         const titles = {
+            overview: 'Overview',
+            providers: 'LLM Providers',
+            persistence: 'Persistence',
+            mcp: 'MCP Registry',
             metrics: 'Performance Metrics',
             audit: 'Audit Trails',
             research: 'Research Runs',
@@ -76,6 +80,14 @@ document.querySelectorAll('.modal-overlay, .modal-close').forEach(el => {
     el.addEventListener('click', (e) => {
         e.target.closest('.modal').classList.add('hidden');
     });
+});
+
+// Close the topmost open modal with Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const openModals = Array.from(document.querySelectorAll('.modal:not(.hidden)'));
+    const top = openModals[openModals.length - 1];
+    if (top) top.classList.add('hidden');
 });
 
 // =========================================
@@ -135,6 +147,11 @@ document.getElementById('form-provider')?.addEventListener('submit', async (e) =
     };
 
     // Send to backend
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    }
     try {
         const res = await fetchWithAuth(`${API_BASE}/providers`, {
             method: 'POST',
@@ -142,17 +159,20 @@ document.getElementById('form-provider')?.addEventListener('submit', async (e) =
         });
 
         if (res.ok) {
-            providers.push(provider);
+            const saved = await res.json().catch(() => provider);
+            providers.push(saved);
             renderProviders();
             closeModal('modal-provider');
         } else {
-            alert('Failed to save provider');
+            alert(`Failed to save provider (HTTP ${res.status})`);
         }
     } catch (err) {
-        // If backend not available, store locally
-        providers.push(provider);
-        renderProviders();
-        closeModal('modal-provider');
+        alert('Could not reach the server. Provider was not saved.');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-save"></i> Save Provider';
+        }
     }
 });
 
@@ -202,12 +222,12 @@ function renderProviders() {
 
     tbody.innerHTML = providers.map(p => `
         <tr>
-            <td><span class="status-pill status-${p.status === 'connected' ? 'healthy' : 'degraded'}">${p.status}</span></td>
-            <td class="font-medium">${p.vendor} <span class="text-sm text-muted">(${p.model_id})</span></td>
-            <td class="text-sm">${p.model_id}</td>
+            <td><span class="status-pill status-${p.status === 'connected' ? 'healthy' : 'degraded'}">${escapeHtml(p.status)}</span></td>
+            <td class="font-medium">${escapeHtml(p.vendor)} <span class="text-sm text-muted">(${escapeHtml(p.model_id)})</span></td>
+            <td class="text-sm">${escapeHtml(p.model_id)}</td>
             <td>
                 <div class="tags-container">
-                    ${p.capabilities.map(cap => `<span class="tag text-xs">${cap}</span>`).join('')}
+                    ${(p.capabilities || []).map(cap => `<span class="tag text-xs">${escapeHtml(cap)}</span>`).join('')}
                 </div>
             </td>
             <td>
@@ -272,7 +292,7 @@ document.getElementById('btn-test-s3')?.addEventListener('click', async () => {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
 
     try {
-        const res = await fetchWithAuth(`${API_BASE}/persistence/test`, {
+        const res = await fetchWithAuth(`${API_BASE}/config/s3/test`, {
             method: 'POST',
             body: JSON.stringify({
                 bucket: document.getElementById('s3-bucket').value,
@@ -289,7 +309,7 @@ document.getElementById('btn-test-s3')?.addEventListener('click', async () => {
             status.textContent = '✓ Connection successful! Bucket is accessible.';
         } else {
             status.className = 'status-message error';
-            status.textContent = '✗ Connection failed. Check your credentials.';
+            status.textContent = `✗ Connection failed (HTTP ${res.status}). Check your credentials.`;
         }
     } catch (err) {
         status.classList.remove('hidden');
@@ -347,8 +367,13 @@ document.getElementById('form-mcp')?.addEventListener('submit', async (e) => {
         capabilities: capabilities
     };
 
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
+    }
     try {
-        const res = await fetchWithAuth(`${API_BASE}/mcp/register`, {
+        const res = await fetchWithAuth(`${API_BASE}/mcp/servers`, {
             method: 'POST',
             body: JSON.stringify(server)
         });
@@ -362,6 +387,11 @@ document.getElementById('form-mcp')?.addEventListener('submit', async (e) => {
     } catch (err) {
         console.error('Failed to register MCP server:', err);
         alert('Failed to register MCP server: ' + err.message);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Register';
+        }
     }
 });
 
@@ -379,11 +409,11 @@ async function loadMcpServers() {
         tbody.innerHTML = data.map(server => `
             <tr>
                 <td><span class="status-pill status-${server.available ? 'healthy' : 'degraded'}">${server.available ? 'Connected' : 'Offline'}</span></td>
-                <td class="font-medium">${server.name} <span class="text-sm text-muted">(${server.id})</span></td>
-                <td class="text-sm">${server.transport_type}</td>
+                <td class="font-medium">${escapeHtml(server.name)} <span class="text-sm text-muted">(${escapeHtml(server.id)})</span></td>
+                <td class="text-sm">${escapeHtml(server.transport_type)}</td>
                 <td>
                     <div class="tags-container">
-                        ${server.capabilities.map(cap => `<span class="tag text-xs">${cap}</span>`).join('')}
+                        ${(server.capabilities || []).map(cap => `<span class="tag text-xs">${escapeHtml(cap)}</span>`).join('')}
                     </div>
                 </td>
                 <td>
@@ -441,16 +471,17 @@ async function loadResearchRuns() {
         grid.innerHTML = runs.map(run => {
             const statusClass = run.outcome === 'Success' ? 'status-completed' : 'status-executing';
             const statusText = run.outcome === 'Success' ? 'COMPLETED' : 'IN_PROGRESS';
+            const shortId = (run.id || '').split('-')[0] || '—';
 
             return `
                 <div class="research-card">
                     <div class="research-card-header">
                         <span class="research-status ${statusClass}">${statusText}</span>
-                        <span class="text-xs text-muted">ID: ${run.id.split('-')[0]}</span>
+                        <span class="text-xs text-muted">ID: ${shortId}</span>
                     </div>
                     <div class="research-info">
-                        <h4 class="font-medium">Research Task: ${run.resource}</h4>
-                        <p class="text-sm text-muted">User: ${run.user_id}</p>
+                        <h4 class="font-medium">Research Task: ${escapeHtml(run.resource)}</h4>
+                        <p class="text-sm text-muted">User: ${escapeHtml(run.user_id)}</p>
                     </div>
                     <div class="research-progress">
                         <div class="progress-bar" style="width: ${run.outcome === 'Success' ? '100%' : '65%'}"></div>
@@ -472,10 +503,23 @@ document.getElementById('btn-refresh-research')?.addEventListener('click', loadR
 // Pending Approvals & WebSocket
 // =========================================
 let approvalSocket = null;
+let approvalEverOpened = false;
+let approvalFailedConnections = 0;
+const APPROVAL_WS_MAX_FAILED_CONNECTIONS = 5;
 
 function connectApprovalWS() {
+    if (!approvalEverOpened && approvalFailedConnections >= APPROVAL_WS_MAX_FAILED_CONNECTIONS) {
+        console.warn('Approval WebSocket unavailable; stopped reconnecting.');
+        return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     approvalSocket = new WebSocket(`${protocol}//${window.location.host}/ws/approval`);
+
+    approvalSocket.onopen = () => {
+        approvalEverOpened = true;
+        approvalFailedConnections = 0;
+    };
 
     approvalSocket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
@@ -486,7 +530,14 @@ function connectApprovalWS() {
 
     approvalSocket.onclose = () => {
         console.log('Approval WebSocket closed. Reconnecting in 5s...');
-        setTimeout(connectApprovalWS, 5000);
+        if (approvalEverOpened) {
+            setTimeout(connectApprovalWS, 5000);
+        } else {
+            approvalFailedConnections += 1;
+            if (approvalFailedConnections < APPROVAL_WS_MAX_FAILED_CONNECTIONS) {
+                setTimeout(connectApprovalWS, 5000);
+            }
+        }
     };
 }
 
@@ -520,8 +571,8 @@ function handleApprovalRequest(req) {
             timeline.innerHTML = req.timeline.map((step, idx) => `
                 <div class="timeline-item ${idx < req.timeline.length - 1 ? 'completed' : 'active'}">
                     <div class="timeline-content">
-                        <span class="timeline-time">${step.time || ''}</span>
-                        <span class="timeline-title">${step.title}</span>
+                        <span class="timeline-time">${escapeHtml(step.time || '')}</span>
+                        <span class="timeline-title">${escapeHtml(step.title)}</span>
                     </div>
                 </div>
             `).join('');
@@ -529,7 +580,6 @@ function handleApprovalRequest(req) {
 
         const modal = document.getElementById('modal-approval');
         modal.classList.remove('hidden');
-        modal.style.display = 'flex';
     };
     window.showApprovalModal(req); // Call the new function to display the modal
 }
@@ -583,11 +633,11 @@ async function loadPendingApprovals() {
                 <div class="approval-card" data-id="${e.id}">
                     <div class="approval-info">
                         <h4>Request History</h4>
-                        <p class="text-sm"><strong>${meta.plan?.tool || 'Action'}</strong></p>
-                        <span class="approval-meta">User: ${e.user_id}</span>
+                        <p class="text-sm"><strong>${escapeHtml(meta.plan?.tool || 'Action')}</strong></p>
+                        <span class="approval-meta">User: ${escapeHtml(e.user_id)}</span>
                     </div>
                      <div class="approval-status ${e.outcome === 'Success' ? 'text-green' : 'text-orange'}">
-                        ${e.outcome}
+                        ${escapeHtml(e.outcome)}
                     </div>
                 </div>
             `;
@@ -629,7 +679,7 @@ function renderDomainLists() {
     if (allowList) {
         allowList.innerHTML = currentPolicy.allow_domains.map(d => `
             <li class="domain-item">
-                <span class="text-sm">${d}</span>
+                <span class="text-sm">${escapeHtml(d)}</span>
                 <button class="btn-remove-domain" onclick="removeDomain('allow', '${d}')"><i class="fa-solid fa-trash-can"></i></button>
             </li>
         `).join('');
@@ -638,7 +688,7 @@ function renderDomainLists() {
     if (denyList) {
         denyList.innerHTML = currentPolicy.deny_domains.map(d => `
             <li class="domain-item">
-                <span class="text-sm">${d}</span>
+                <span class="text-sm">${escapeHtml(d)}</span>
                 <button class="btn-remove-domain" onclick="removeDomain('deny', '${d}')"><i class="fa-solid fa-trash-can"></i></button>
             </li>
         `).join('');
@@ -664,6 +714,13 @@ document.getElementById('btn-add-allow')?.addEventListener('click', () => {
     }
 });
 
+document.getElementById('input-allow-domain')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btn-add-allow').click();
+    }
+});
+
 document.getElementById('btn-add-deny')?.addEventListener('click', () => {
     const input = document.getElementById('input-deny-domain');
     const domain = input.value.trim();
@@ -671,6 +728,13 @@ document.getElementById('btn-add-deny')?.addEventListener('click', () => {
         currentPolicy.deny_domains.push(domain);
         input.value = '';
         renderDomainLists();
+    }
+});
+
+document.getElementById('input-deny-domain')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btn-add-deny').click();
     }
 });
 
@@ -754,11 +818,11 @@ async function loadAuditLogs() {
 
         tbody.innerHTML = entries.map(e => `
             <tr>
-                <td>${e.timestamp}</td>
-                <td>${e.user_id}</td>
-                <td>${e.action}</td>
-                <td>${e.resource}</td>
-                <td><span class="outcome-${e.outcome?.toLowerCase()}">${e.outcome}</span></td>
+                <td>${formatTimestamp(e.timestamp)}</td>
+                <td>${escapeHtml(e.user_id)}</td>
+                <td>${escapeHtml(e.action)}</td>
+                <td>${escapeHtml(e.resource)}</td>
+                <td><span class="outcome-${(e.outcome || '').toLowerCase()}">${escapeHtml(e.outcome)}</span></td>
             </tr>
         `).join('');
     } catch (err) {
@@ -899,7 +963,7 @@ function renderHarnessSuiteResult(result) {
             
             // Generate tags string
             const tagsHtml = originalCase 
-                ? originalCase.tags.map(t => `<span class="case-tag">${t}</span>`).join('') 
+                ? originalCase.tags.map(t => `<span class="case-tag">${escapeHtml(t)}</span>`).join('') 
                 : '';
                 
             // Format expected output text for assertion representation
@@ -911,7 +975,7 @@ function renderHarnessSuiteResult(result) {
             const failureHtml = tcResult.failure_reason 
                 ? `<div class="failure-reason-box">
                     <i class="fa-solid fa-triangle-exclamation"></i>
-                    <div><strong>Failure Reason:</strong> ${tcResult.failure_reason}</div>
+                    <div><strong>Failure Reason:</strong> ${escapeHtml(tcResult.failure_reason)}</div>
                    </div>`
                 : '';
                 
@@ -924,9 +988,9 @@ function renderHarnessSuiteResult(result) {
                         <div class="case-info-left">
                             <span class="status-badge ${statusClass}">
                                 <i class="fa-solid ${badgeIcon}"></i>
-                                ${tcResult.status}
+                                ${escapeHtml(tcResult.status)}
                             </span>
-                            <h4 class="case-name">${tcResult.name}</h4>
+                            <h4 class="case-name">${escapeHtml(tcResult.name)}</h4>
                         </div>
                         <div class="case-stats">
                             <div class="case-stat-item">
@@ -1111,6 +1175,12 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+function formatTimestamp(ts) {
+    if (!ts) return '—';
+    const date = new Date(ts);
+    return isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
 // =========================================

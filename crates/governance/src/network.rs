@@ -201,125 +201,6 @@ impl NetworkPolicy {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_deny() {
-        let policy = NetworkPolicy::default();
-        let result = policy.check("https://google.com").unwrap();
-        assert!(matches!(result, NetworkDecision::Denied(_)));
-    }
-
-    #[test]
-    fn test_allow_domain() {
-        let policy = NetworkPolicy::new(vec!["google.com".to_string()], vec![], vec![443]);
-        let result = policy.check("https://google.com").unwrap();
-        assert_eq!(result, NetworkDecision::Allowed);
-    }
-
-    #[test]
-    fn test_wildcard_allow() {
-        let policy = NetworkPolicy::new(vec!["*.google.com".to_string()], vec![], vec![443]);
-        assert_eq!(
-            policy.check("https://mail.google.com").unwrap(),
-            NetworkDecision::Allowed
-        );
-        assert_eq!(
-            policy.check("https://google.com").unwrap(),
-            NetworkDecision::Allowed
-        );
-        assert!(matches!(
-            policy.check("https://yahoo.com").unwrap(),
-            NetworkDecision::Denied(_)
-        ));
-    }
-
-    #[test]
-    fn test_explicit_deny_precedence() {
-        let policy = NetworkPolicy::new(
-            vec!["*.google.com".to_string()],
-            vec!["mail.google.com".to_string()],
-            vec![443],
-        );
-        // Explicitly denied
-        let result = policy.check("https://mail.google.com").unwrap();
-        assert!(
-            matches!(result, NetworkDecision::Denied(reason) if reason.contains("explicitly denied"))
-        );
-
-        // Allowed by wildcard
-        assert_eq!(
-            policy.check("https://maps.google.com").unwrap(),
-            NetworkDecision::Allowed
-        );
-    }
-
-    #[test]
-    fn test_port_restriction() {
-        let policy = NetworkPolicy::new(vec!["google.com".to_string()], vec![], vec![443]);
-        // Port 80 not allowed
-        let result = policy.check("http://google.com").unwrap(); // http implies 80
-        assert!(matches!(result, NetworkDecision::Denied(reason) if reason.contains("Port 80")));
-    }
-
-    #[test]
-    fn test_ip_block() {
-        let policy = NetworkPolicy::new(vec!["*".to_string()], vec![], vec![443]);
-        let result = policy.check("https://1.1.1.1").unwrap();
-        assert!(
-            matches!(result, NetworkDecision::Denied(reason) if reason.contains("Direct IP access"))
-        );
-    }
-
-    #[test]
-    fn test_ssrf_blocks() {
-        let policy = NetworkPolicy::default();
-
-        // IPv4-mapped IPv6 Loopback
-        let ip: std::net::IpAddr = "::ffff:127.0.0.1".parse().unwrap();
-        assert!(
-            policy.check_ip(ip).is_err(),
-            "Should block IPv4-mapped loopback"
-        );
-
-        // IPv4-mapped IPv6 Private
-        let ip: std::net::IpAddr = "::ffff:10.0.0.1".parse().unwrap();
-        assert!(
-            policy.check_ip(ip).is_err(),
-            "Should block IPv4-mapped private"
-        );
-
-        // Carrier-Grade NAT
-        let ip: std::net::IpAddr = "100.64.0.1".parse().unwrap();
-        assert!(policy.check_ip(ip).is_err(), "Should block CGNAT");
-
-        // Cloud Metadata
-        let ip: std::net::IpAddr = "169.254.169.254".parse().unwrap();
-        assert!(policy.check_ip(ip).is_err(), "Should block Metadata");
-
-        // Benchmarking
-        let ip: std::net::IpAddr = "198.18.0.1".parse().unwrap();
-        assert!(policy.check_ip(ip).is_err(), "Should block Benchmarking");
-
-        // Class E (Reserved)
-        let ip: std::net::IpAddr = "240.0.0.1".parse().unwrap();
-        assert!(policy.check_ip(ip).is_err(), "Should block Class E");
-
-        // IPv6 Unique Local
-        let ip: std::net::IpAddr = "fc00::1".parse().unwrap();
-        assert!(
-            policy.check_ip(ip).is_err(),
-            "Should block IPv6 Unique Local"
-        );
-
-        // Public IP (Cloudflare DNS) - Should Pass
-        let ip: std::net::IpAddr = "1.1.1.1".parse().unwrap();
-        assert!(policy.check_ip(ip).is_ok(), "Should allow public IP");
-    }
-}
-
 // =============================================================================
 // Egress Logic
 // =============================================================================
@@ -485,4 +366,123 @@ pub async fn fetch_with_policy(
         "Too many redirects (max {})",
         MAX_REDIRECTS
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_deny() {
+        let policy = NetworkPolicy::default();
+        let result = policy.check("https://google.com").unwrap();
+        assert!(matches!(result, NetworkDecision::Denied(_)));
+    }
+
+    #[test]
+    fn test_allow_domain() {
+        let policy = NetworkPolicy::new(vec!["google.com".to_string()], vec![], vec![443]);
+        let result = policy.check("https://google.com").unwrap();
+        assert_eq!(result, NetworkDecision::Allowed);
+    }
+
+    #[test]
+    fn test_wildcard_allow() {
+        let policy = NetworkPolicy::new(vec!["*.google.com".to_string()], vec![], vec![443]);
+        assert_eq!(
+            policy.check("https://mail.google.com").unwrap(),
+            NetworkDecision::Allowed
+        );
+        assert_eq!(
+            policy.check("https://google.com").unwrap(),
+            NetworkDecision::Allowed
+        );
+        assert!(matches!(
+            policy.check("https://yahoo.com").unwrap(),
+            NetworkDecision::Denied(_)
+        ));
+    }
+
+    #[test]
+    fn test_explicit_deny_precedence() {
+        let policy = NetworkPolicy::new(
+            vec!["*.google.com".to_string()],
+            vec!["mail.google.com".to_string()],
+            vec![443],
+        );
+        // Explicitly denied
+        let result = policy.check("https://mail.google.com").unwrap();
+        assert!(
+            matches!(result, NetworkDecision::Denied(reason) if reason.contains("explicitly denied"))
+        );
+
+        // Allowed by wildcard
+        assert_eq!(
+            policy.check("https://maps.google.com").unwrap(),
+            NetworkDecision::Allowed
+        );
+    }
+
+    #[test]
+    fn test_port_restriction() {
+        let policy = NetworkPolicy::new(vec!["google.com".to_string()], vec![], vec![443]);
+        // Port 80 not allowed
+        let result = policy.check("http://google.com").unwrap(); // http implies 80
+        assert!(matches!(result, NetworkDecision::Denied(reason) if reason.contains("Port 80")));
+    }
+
+    #[test]
+    fn test_ip_block() {
+        let policy = NetworkPolicy::new(vec!["*".to_string()], vec![], vec![443]);
+        let result = policy.check("https://1.1.1.1").unwrap();
+        assert!(
+            matches!(result, NetworkDecision::Denied(reason) if reason.contains("Direct IP access"))
+        );
+    }
+
+    #[test]
+    fn test_ssrf_blocks() {
+        let policy = NetworkPolicy::default();
+
+        // IPv4-mapped IPv6 Loopback
+        let ip: std::net::IpAddr = "::ffff:127.0.0.1".parse().unwrap();
+        assert!(
+            policy.check_ip(ip).is_err(),
+            "Should block IPv4-mapped loopback"
+        );
+
+        // IPv4-mapped IPv6 Private
+        let ip: std::net::IpAddr = "::ffff:10.0.0.1".parse().unwrap();
+        assert!(
+            policy.check_ip(ip).is_err(),
+            "Should block IPv4-mapped private"
+        );
+
+        // Carrier-Grade NAT
+        let ip: std::net::IpAddr = "100.64.0.1".parse().unwrap();
+        assert!(policy.check_ip(ip).is_err(), "Should block CGNAT");
+
+        // Cloud Metadata
+        let ip: std::net::IpAddr = "169.254.169.254".parse().unwrap();
+        assert!(policy.check_ip(ip).is_err(), "Should block Metadata");
+
+        // Benchmarking
+        let ip: std::net::IpAddr = "198.18.0.1".parse().unwrap();
+        assert!(policy.check_ip(ip).is_err(), "Should block Benchmarking");
+
+        // Class E (Reserved)
+        let ip: std::net::IpAddr = "240.0.0.1".parse().unwrap();
+        assert!(policy.check_ip(ip).is_err(), "Should block Class E");
+
+        // IPv6 Unique Local
+        let ip: std::net::IpAddr = "fc00::1".parse().unwrap();
+        assert!(
+            policy.check_ip(ip).is_err(),
+            "Should block IPv6 Unique Local"
+        );
+
+        // Public IP (Cloudflare DNS) - Should Pass
+        let ip: std::net::IpAddr = "1.1.1.1".parse().unwrap();
+        assert!(policy.check_ip(ip).is_ok(), "Should allow public IP");
+    }
 }

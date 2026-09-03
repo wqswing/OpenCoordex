@@ -49,6 +49,8 @@ pub struct ReActConfig {
     pub agent_type: String,
     /// KYA: Underlying LLM model name.
     pub model_name: String,
+    /// Tool risk score at which human approval is requested.
+    pub approval_threshold: u32,
 }
 
 impl Default for ReActConfig {
@@ -61,6 +63,7 @@ impl Default for ReActConfig {
             agent_id: "default-agent-id".to_string(),
             agent_type: "General".to_string(),
             model_name: "gpt-4o".to_string(),
+            approval_threshold: 50,
         }
     }
 }
@@ -484,7 +487,7 @@ Always think before acting. Be concise and focused on the goal."#
 
         // 3. Approval Check
         if let Some(ref gate) = self.approval_gate {
-            let threshold_score = 50; // TODO: Make configurable via policy thresholds
+            let threshold_score = self.config.approval_threshold;
 
             if risk_score >= threshold_score {
                 tracing::info!(

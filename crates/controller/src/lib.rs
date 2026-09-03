@@ -21,9 +21,8 @@ pub mod summarization;
 
 pub use builder::ReActBuilder;
 pub use capability::{
-    AgentCapability, CompressionCapability, DelegationCapability, McpCapability,
-    ReflectionCapability, SecurityCapability, ActiveWorkspaceCapability,
-    GrillingCapability,
+    ActiveWorkspaceCapability, AgentCapability, CompressionCapability, DelegationCapability,
+    GrillingCapability, McpCapability, ReflectionCapability, SecurityCapability,
 };
 pub use memory::MemoryCapability;
 pub use memory_writeback::MemoryWritebackCapability;

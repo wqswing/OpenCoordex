@@ -6,7 +6,7 @@
 //! - Output safety validation
 
 use async_trait::async_trait;
-use multi_agent_core::{Result, Error};
+use multi_agent_core::{Error, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -300,7 +300,10 @@ Respond ONLY with a JSON object in this format:
                     Ok(res) => {
                         if res.has_anomaly && res.confidence >= self.confidence_threshold {
                             Ok(GuardrailResult::fail(
-                                format!("Cognitive anomaly in input: {} (confidence: {})", res.reason, res.confidence),
+                                format!(
+                                    "Cognitive anomaly in input: {} (confidence: {})",
+                                    res.reason, res.confidence
+                                ),
                                 ViolationType::CognitiveAnomaly,
                             ))
                         } else {
@@ -344,7 +347,10 @@ Respond ONLY with a JSON object in this format:
                     Ok(res) => {
                         if res.has_anomaly && res.confidence >= self.confidence_threshold {
                             Ok(GuardrailResult::fail(
-                                format!("Cognitive anomaly in output: {} (confidence: {})", res.reason, res.confidence),
+                                format!(
+                                    "Cognitive anomaly in output: {} (confidence: {})",
+                                    res.reason, res.confidence
+                                ),
                                 ViolationType::CognitiveAnomaly,
                             ))
                         } else {
@@ -425,7 +431,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl multi_agent_core::traits::LlmClient for MockLlm {
-        async fn complete(&self, _prompt: &str) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+        async fn complete(
+            &self,
+            _prompt: &str,
+        ) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
             Ok(multi_agent_core::LlmResponse {
                 content: self.response_content.clone(),
                 finish_reason: "stop".to_string(),
@@ -433,7 +442,10 @@ mod tests {
                 tool_calls: None,
             })
         }
-        async fn chat(&self, _messages: &[multi_agent_core::traits::ChatMessage]) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
+        async fn chat(
+            &self,
+            _messages: &[multi_agent_core::traits::ChatMessage],
+        ) -> multi_agent_core::Result<multi_agent_core::LlmResponse> {
             self.complete("").await
         }
         async fn embed(&self, _text: &str) -> multi_agent_core::Result<Vec<f32>> {
@@ -444,7 +456,9 @@ mod tests {
     #[tokio::test]
     async fn test_cognitive_intent_guardrail_pass() {
         let mock_llm = std::sync::Arc::new(MockLlm {
-            response_content: r#"{"has_anomaly": false, "confidence": 15.0, "reason": "Clear request"}"#.to_string(),
+            response_content:
+                r#"{"has_anomaly": false, "confidence": 15.0, "reason": "Clear request"}"#
+                    .to_string(),
         });
         let guardrail = CognitiveIntentGuardrail::new(mock_llm).with_threshold(80.0);
 
@@ -460,9 +474,15 @@ mod tests {
         });
         let guardrail = CognitiveIntentGuardrail::new(mock_llm).with_threshold(80.0);
 
-        let result = guardrail.check_output("Drafting deceptive report").await.unwrap();
+        let result = guardrail
+            .check_output("Drafting deceptive report")
+            .await
+            .unwrap();
         assert!(!result.passed);
         assert!(result.reason.unwrap().contains("deception detected"));
-        assert!(matches!(result.violation_type.unwrap(), ViolationType::CognitiveAnomaly));
+        assert!(matches!(
+            result.violation_type.unwrap(),
+            ViolationType::CognitiveAnomaly
+        ));
     }
 }
