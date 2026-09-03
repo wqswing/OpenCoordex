@@ -600,7 +600,7 @@ async fn register_mcp(
 
 /// Remove MCP server.
 async fn remove_mcp(State(state): State<Arc<AdminState>>, Path(id): Path<String>) -> Response {
-    state.mcp_registry.unregister(&id);
+    let _ = state.mcp_registry.unregister(&id).await;
 
     let _ = state
         .audit_store

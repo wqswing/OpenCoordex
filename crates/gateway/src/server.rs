@@ -59,7 +59,10 @@ impl Default for GatewayConfig {
             port: 3000,
             enable_cors: true,
             enable_tracing: true,
-            allowed_origins: vec!["*".to_string()],
+            allowed_origins: vec![
+                "http://localhost:3000".to_string(),
+                "http://127.0.0.1:3000".to_string(),
+            ],
             tls: TlsConfig {
                 enabled: false,
                 cert_path: None,

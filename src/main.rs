@@ -90,13 +90,13 @@ async fn main() -> anyhow::Result<()> {
     let secrets_path = std::path::PathBuf::from("secrets.json");
     let master_key_bytes = if let Some(key) = &app_config.store.encryption.master_key {
         use secrecy::ExposeSecret;
+        use sha2::Digest;
         let key_str = key.expose_secret();
-        let mut key_bytes = [0u8; 32];
-        // naive padding/truncation for demo
-        let bytes = key_str.as_bytes();
-        let len = bytes.len().min(32);
-        key_bytes[0..len].copy_from_slice(&bytes[0..len]);
-        Some(key_bytes)
+        // Derive a fixed 32-byte key from the configured secret instead of padding it.
+        // secrets.json files written by versions that zero-padded the key directly need
+        // to be re-created under the new derivation.
+        tracing::warn!("Deriving secrets master key via SHA-256");
+        Some(sha2::Sha256::digest(key_str.as_bytes()).into())
     } else {
         None
     };

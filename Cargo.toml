@@ -143,6 +143,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 secrecy.workspace = true
+sha2.workspace = true
 
 multi_agent_core.workspace = true
 multi_agent_gateway.workspace = true

@@ -301,3 +301,23 @@ async fn test_admin_cognitive_endpoints() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_dashboard_assets_served() {
+    // Regression: the console is served from a nested mount, so the embedded
+    // stylesheet/bundle must be reachable or the page loads as a dead shell.
+    let router = multi_agent_admin::admin_static_router();
+    for path in ["/index.html", "/app.js", "/style.css"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "dashboard asset {} should be served",
+            path
+        );
+    }
+}
